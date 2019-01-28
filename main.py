@@ -17,6 +17,7 @@ import waifu2x
 def do_noting_func(*args, **kwargs):
     pass
 
+
 # mute waifu2x output
 waifu2x.six.print_ = do_noting_func
 
@@ -100,7 +101,7 @@ def process_frames(videoInfo, outputFileName, func, **kwargs):
         time_left = str(datetime.timedelta(0, time_cost * (total_size - cnt)))
 
         # Todo add progress bar
-        utils.print_progress_bar(0, total_size, name, "time left: {}".format(time_left), decimals=3, length=50)
+        utils.print_progress_bar(cnt, total_size, name, "time left: {}".format(time_left), decimals=3, length=50)
         # print('Elapsed time: {:.6f} sec'.format(time_cost), '\t',
         #       "time to finish: {}".format(str(datetime.timedelta(0, time_cost * (total_size - cnt)))), '\t',
         #       "progress: {}%".format(cnt * 100. / total_size))
