@@ -1,0 +1,3 @@
+[submodule "waifu2x-chainer"]
+	path = waifu2x-chainer
+	url = git@github.com:tsurumeso/waifu2x-chainer.git
