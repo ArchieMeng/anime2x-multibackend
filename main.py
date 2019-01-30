@@ -7,26 +7,24 @@ from pymediainfo import MediaInfo
 from PIL import Image
 import datetime
 import utils
+from concurrent.futures import TimeoutError, ProcessPoolExecutor
+from collections import deque
 
 programDir = os.path.dirname(__file__)
-sys.path.append(os.path.join(programDir, "waifu2x-chainer"))
-import waifu2x
 
+import waifu2x_func
 
 
 def do_noting_func(*args, **kwargs):
     pass
 
 
-# mute waifu2x output
-waifu2x.six.print_ = do_noting_func
-
 p = argparse.ArgumentParser()
 p.add_argument('--gpu', '-g', type=int, default=-1)
-p.add_argument('--input', '-i', default='"test.mp4"')
+p.add_argument('--input', '-i', default='test.mp4')
 p.add_argument('--output_dir', '-o', default='./')
-p.add_argument('--extension', '-e', default='png')
-p.add_argument('--quality', '-q', type=int, default=None)
+p.add_argument('--extension', '-e', default='mp4')
+p.add_argument('--quiet', '-q', action='store_true')
 p.add_argument('--arch', '-a',
                choices=['VGG7', '0', 'UpConv7', '1',
                         'ResNet10', '2', 'UpResNet10', '3'],
@@ -42,13 +40,15 @@ p.add_argument('--tta', '-t', action='store_true')
 p.add_argument('--tta_level', '-T', type=int, choices=[2, 4, 8], default=8)
 p.add_argument('--batch_size', '-b', type=int, default=16)
 p.add_argument('--block_size', '-l', type=int, default=128)
+p.add_argument('--vcodec', default="libx264")
+p.add_argument("--copy_test", action='store_true')
 g = p.add_mutually_exclusive_group()
 g.add_argument('--width', '-W', type=int, default=0)
 g.add_argument('--height', '-H', type=int, default=0)
 
 args = p.parse_args()
-if args.arch in waifu2x.srcnn.table:
-    args.arch = waifu2x.srcnn.table[args.arch]
+if args.arch in waifu2x_func.srcnn.table:
+    args.arch = waifu2x_func.srcnn.table[args.arch]
 
 
 def process_frames(videoInfo, outputFileName, func, **kwargs):
@@ -73,38 +73,73 @@ def process_frames(videoInfo, outputFileName, func, **kwargs):
         ffmpeg
             .input(name)
             .output('pipe:', format='rawvideo', pix_fmt='rgb24')
-            .run_async(pipe_stdout=True, quiet=True)
+            .run_async(pipe_stdout=True, quiet=args.quiet)
     )
 
-    process2 = (
-        ffmpeg
-            .input('pipe:', format='rawvideo', pix_fmt='rgb24',
-                   s='{}x{}'.format(int(width * args.scale_ratio), int(height * args.scale_ratio)))
-            .output(outputFileName, pix_fmt='yuv420p', **kwargs)
-            .overwrite_output()
-            .run_async(pipe_stdin=True, quiet=True)
-    )
-
-    print(utils.print_progress_bar(0, total_size, name, "time left: N/A"))
-
-    while True:
-        start = time.time()
-        in_bytes = process1.stdout.read(width * height * 3)
-        if not in_bytes:
-            break
-
-        process2.stdin.write(
-            func(in_bytes, width, height)
+    if 'Audio' in videoInfo:
+        audioStream = ffmpeg.input(name)["a"]
+        videoStream = (
+            ffmpeg
+                .input('pipe:', format='rawvideo', pix_fmt='rgb24',
+                       s='{}x{}'.format(int(width * args.scale_ratio), int(height * args.scale_ratio)))
         )
-        cnt += 1
-        time_cost = time.time() - start
-        time_left = str(datetime.timedelta(0, time_cost * (total_size - cnt)))
 
-        # Todo add progress bar
-        utils.print_progress_bar(cnt, total_size, name, "time left: {}".format(time_left), decimals=3, length=50)
-        # print('Elapsed time: {:.6f} sec'.format(time_cost), '\t',
-        #       "time to finish: {}".format(str(datetime.timedelta(0, time_cost * (total_size - cnt)))), '\t',
-        #       "progress: {}%".format(cnt * 100. / total_size))
+        process2 = (
+            ffmpeg
+                .output(videoStream, audioStream, outputFileName, pix_fmt='yuv420p', strict='experimental',
+                        **kwargs)
+                .overwrite_output()
+                .run_async(pipe_stdin=True, quiet=args.quiet)
+        )
+    else:
+        process2 = (
+            ffmpeg
+                .input('pipe:', format='rawvideo', pix_fmt='rgb24',
+                       s='{}x{}'.format(int(width * args.scale_ratio), int(height * args.scale_ratio)))
+                .output(outputFileName, pix_fmt='yuv420p', **kwargs)
+                .overwrite_output()
+                .run_async(pipe_stdin=True, quiet=args.quiet)
+        )
+
+    utils.print_progress_bar(0, total_size, name, "time left: N/A", length=50)
+
+    with ProcessPoolExecutor(os.cpu_count()) as executor:
+        futures = deque()
+        time_cost = 30 # this will be used as time_out for result in CPU mode
+
+        start = time.time()
+        while True:
+            in_bytes = process1.stdout.read(width * height * 3)
+            if not in_bytes and not futures:
+                break
+
+            if args.gpu >= 0:
+                process2.stdin.write(
+                    func(in_bytes, width, height)
+                )
+                cnt += 1
+                time_cost = time.time() - start
+                time_left = str(datetime.timedelta(0, time_cost * (total_size - cnt) / cnt))
+                utils.print_progress_bar(cnt, total_size, name, "time left: {}".format(time_left), decimals=3,
+                                         length=50)
+
+            else:  # CPU mode
+                futures.append(executor.submit(func, in_bytes, width, height))
+
+                future = futures[0]
+                try:
+                    out_bytes = future.result(timeout=time_cost)
+                    process2.stdin.write(out_bytes)
+
+                    cnt += 1
+                    time_cost = time.time() - start
+                    time_left = str(datetime.timedelta(0, time_cost * (total_size - cnt) / cnt))
+                    utils.print_progress_bar(cnt, total_size, name, "time left: {}".format(time_left), decimals=3,
+                                             length=50)
+
+                    futures.popleft()
+                except TimeoutError:
+                    pass
 
     process2.stdin.close()
     process1.wait()
@@ -112,26 +147,37 @@ def process_frames(videoInfo, outputFileName, func, **kwargs):
 
 
 def noise_scale(img, width, height):
-    img = Image.frombytes('RGB', (width, height), img, "raw", "RGB", 0, 1)
+    img = Image.frombuffer('RGB', (width, height), img, "raw", "RGB", 0, 1)
     if 'noise_scale' in models:
-        img = waifu2x.upscale_image(
+        img = waifu2x_func.upscale_image(
             args, img, models['noise_scale'], models['alpha'])
     else:
         if 'noise' in models:
-            img = waifu2x.denoise_image(args, img, models['noise'])
+            img = waifu2x_func.denoise_image(args, img, models['noise'])
         if 'scale' in models:
-            img = waifu2x.upscale_image(args, img, models['scale'])
+            img = waifu2x_func.upscale_image(args, img, models['scale'])
     return img.tobytes()
 
 
 def save_bytes_frame(img, w, h):
     with open('frame.bytes', 'wb') as fp:
-        fp.write(img.tobytes())
+        fp.write(img)
     return img
 
 
+# mute waifu2x output
+if args.quiet:
+    waifu2x_func.six.print_ = do_noting_func
+
 if __name__ == "__main__":
     videoInfo = {track.track_type: track.to_data() for track in MediaInfo.parse(args.input).tracks}
-    models = waifu2x.load_models(args)
-    process_frames(videoInfo, videoInfo['General']['file_name'] + "[processed].mp4", noise_scale, vcodec="libx265")
+    models = waifu2x_func.load_models(args)
+    if args.copy_test:
+        args.scale_ratio = 1.0
+        process_frames(videoInfo, videoInfo['General']['file_name'] + "[processed]." + args.extension,
+                       save_bytes_frame, vcodec=args.vcodec)
+
+    else:
+        process_frames(videoInfo, videoInfo['General']['file_name'] + "[processed]." + args.extension,
+                       noise_scale, vcodec=args.vcodec)
     # process_frames(videoInfo, videoInfo['General']['file_name'] + "[processed].mp4", save_bytes_frame)
