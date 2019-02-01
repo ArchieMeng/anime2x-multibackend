@@ -62,6 +62,7 @@ def process_frames(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
     width, height = videoInfo['Video']['width'], videoInfo['Video']['height']
     cnt, total_size = 0, videoInfo['General']['duration'] * float(videoInfo['General']['frame_rate']) / 1000
     name = videoInfo['General']['complete_name']
+    tmpFileName = videoInfo['General']['file_name'] + '_tmp.' + outputFileName.split('.')[-1]
 
     process1 = (
         ffmpeg
@@ -80,7 +81,7 @@ def process_frames(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
 
         process2 = (
             ffmpeg
-                .output(videoStream, audioStream, outputFileName, pix_fmt='yuv420p', strict='experimental',
+                .output(videoStream, audioStream, tmpFileName, pix_fmt='yuv420p', strict='experimental',
                         r=videoInfo['Video']['frame_rate'], **kwargs)
                 .overwrite_output()
                 .run_async(pipe_stdin=True, quiet=(not args.debug) | args.mute_ffmpeg)
@@ -90,7 +91,7 @@ def process_frames(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
             ffmpeg
                 .input('pipe:', format='rawvideo', pix_fmt='rgb24',
                        s='{}x{}'.format(int(width * args.scale_ratio), int(height * args.scale_ratio)))
-                .output(outputFileName, pix_fmt='yuv420p', r=videoInfo['Video']['frame_rate'], **kwargs)
+                .output(tmpFileName, pix_fmt='yuv420p', r=videoInfo['Video']['frame_rate'], **kwargs)
                 .overwrite_output()
                 .run_async(pipe_stdin=True, quiet=(not args.debug) | args.mute_ffmpeg)
         )
@@ -140,6 +141,27 @@ def process_frames(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
     process2.stdin.close()
     process1.wait()
     process2.wait()
+
+    tmpFileInfo = {track.track_type: track.to_data() for track in MediaInfo.parse(tmpFileName).tracks}
+    if tmpFileInfo['Video']['frame_count'] != videoInfo['Video']['frame_count']:
+        print("correcting video stream")
+        tmpFramesCount, correctFrameCount = tmpFileInfo['Video']['frame_count'], videoInfo['Video']['frame_count']
+
+        audioStream = ffmpeg.input(name)['a']
+        videoStream = (
+            ffmpeg
+                .input(tmpFileName)
+                .setpts("{}/{}*PTS".format(correctFrameCount, tmpFramesCount))
+        )
+        
+        (ffmpeg
+                .output(videoStream, audioStream, outputFileName, pix_fmt='yuv420p', r=videoInfo['Video']['frame_rate'],
+                        **kwargs)
+                .overwrite_output()
+                .run())
+        os.remove(tmpFileName)
+    else:
+        os.rename(tmpFileName, outputFileName)
 
 
 def noise_scale(img, width, height):
