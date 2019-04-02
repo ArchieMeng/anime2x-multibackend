@@ -64,12 +64,36 @@ python main.py -i video.mkv -j 4
 python main.py -g 0 -a 3 -n 1 -m noise_scale -i test.mp4
 ```
 gpu to use: -g --gpu int
+
 models type: -a --arch ['VGG7', '0', 'UpConv7', '1', 'ResNet10', '2', 'UpResNet10', '3'] 
+
 denoise strength: -n --noise_level [0, 1, 2, 3]
+
 processing method: -m --method ['noise', 'scale', 'noise_scale']
-`All the image-related processing options are directly passed to waifu2x-chainer. For more info of such options, please turn to waifu2x-chainer.`
+
+`NOTE: All the image-related processing options are directly passed to waifu2x-chainer. For more info about such options, please turn to waifu2x-chainer which is the dependency of this project.`
 
 #### simply scale video and output with video codec HEVC & extension 
 ```bash
 python main.py -i video.mkv -m scale --vcodec libx265
 ```
+
+## License
+This software is distributed under the [Apache2.0 license](https://raw.github.com/ArchieMeng/anime2x-chainer/master/LICENSE.txt).
+
+In particular, please be aware that
+
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Translated to human words:
+
+*In case your use of the software forms the basis of copyright infringement, or you use the software for any other illegal purposes, the authors cannot take any responsibility for you.*
+
+We only ship the code here, and how you are going to use it is left to your own discretion.
+
