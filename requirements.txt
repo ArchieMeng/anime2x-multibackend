@@ -1,7 +1,7 @@
-chainer==5.2.0
-ffmpeg-python==0.1.17
-future==0.17.1
-numpy==1.16.0
-Pillow==5.4.1
-pymediainfo==3.0
-six==1.12.0
+chainer
+ffmpeg-python
+future
+numpy
+Pillow
+pymediainfo
+six
