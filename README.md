@@ -75,7 +75,7 @@ python anime2x.py -i video.mkv -m scale --vcodec libx265
 
 ## How to support other versions of waifu2x?
 
-Write a module which contain "process_frame" function and place it in the utils folder like utils/waifu2x_chainer.py . 
+Write a module which contains "process_frame" function and place it in the utils folder like utils/waifu2x_chainer.py . 
  
 \#1 Function Declaration: process_frame(img: bytes, width: int, height: int,) --> bytes
 

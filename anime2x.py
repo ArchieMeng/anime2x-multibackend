@@ -15,6 +15,8 @@ import utils.utils as ut
 programDir = os.path.dirname(__file__)
 
 p = argparse.ArgumentParser()
+p.add_argument('--vcodec', default="libx264")
+p.add_argument('--acodec', default="copy")
 p.add_argument('--scale_ratio', '-s', type=float, default=2.0)
 p.add_argument('--input', '-i', default='test.mp4')
 p.add_argument('--output_dir', '-o', default='./')
@@ -22,14 +24,11 @@ p.add_argument('--extension', '-e', default='mp4')
 p.add_argument('--debug', '-d', action='store_true')
 p.add_argument('--mute_ffmpeg', action='store_true')
 p.add_argument('--mute_waifu2x', action='store_true')
-p.add_argument('--vcodec', default="libx264")
-p.add_argument('--acodec', default="copy")
 p.add_argument("--copy_test", action='store_true')
 # the waifu2x module to use
 p.add_argument("--waifu2x", default="waifu2x_chainer")
-g = p.add_mutually_exclusive_group()
-g.add_argument('--width', '-W', type=int, default=0)
-g.add_argument('--height', '-H', type=int, default=0)
+p.add_argument('--width', '-W', type=int, default=0)
+p.add_argument('--height', '-H', type=int, default=0)
 
 args, unknown = p.parse_known_args()
 
@@ -125,10 +124,13 @@ def process_video(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
     process1.wait()
     process2.wait()
 
-    tmpFileInfo = {track.track_type: track.to_data() for track in MediaInfo.parse(tmpFileName).tracks}
+    tmpFileInfo = {track.track_type: track.to_data()
+                   for track in MediaInfo.parse(tmpFileName).tracks}
     if tmpFileInfo['Video']['frame_count'] != videoInfo['Video']['frame_count']:
         print("correcting video stream")
-        tmpFramesCount, correctFrameCount = tmpFileInfo['Video']['frame_count'], videoInfo['Video']['frame_count']
+        tmpFramesCount, correctFrameCount = (
+        tmpFileInfo['Video']['frame_count'],
+        videoInfo['Video']['frame_count'])
 
         audioStream = ffmpeg.input(name)['a']
         videoStream = (
@@ -138,17 +140,21 @@ def process_video(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
         )
 
         (ffmpeg
-                .output(videoStream, audioStream, outputFileName, pix_fmt='yuv420p', r=videoInfo['Video']['frame_rate'],
-                        **kwargs)
-                .overwrite_output()
-                .run())
+         .output(videoStream,
+                 audioStream,
+                 outputFileName,
+                 pix_fmt='yuv420p',
+                 r=videoInfo['Video']['frame_rate'],
+                 **kwargs)
+         .overwrite_output()
+         .run())
         os.remove(tmpFileName)
     else:
         os.rename(tmpFileName, outputFileName)
 
 
 def save_bytes_frame(img, w, h):
-    img = Image.frombuffer(mode="RGB", data=img, size=(w, h))
+    img = Image.frombytes(mode="RGB", data=img, size=(w, h))
     with open('frame.bytes', 'wb') as fp:
         fp.write(img.tobytes())
     return img.tobytes()

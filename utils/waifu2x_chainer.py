@@ -54,7 +54,7 @@ g = p.add_mutually_exclusive_group()
 g.add_argument('--width', '-W', type=int, default=0)
 g.add_argument('--height', '-H', type=int, default=0)
 
-args = p.parse_args()
+args, _ = p.parse_known_args()
 if args.arch in srcnn.table:
     args.arch = srcnn.table[args.arch]
 
@@ -185,7 +185,7 @@ def load_models(cfg):
 def process_frame(img: bytes,
                   width,
                   height, ):
-    img = Image.frombuffer('RGB', (width, height), img, "raw", "RGB", 0, 1)
+    img = Image.frombytes('RGB', (width, height), img, "raw", "RGB", 0, 1)
     if 'noise_scale' in models:
         img = upscale_image(
             args, img, models['noise_scale'], models['alpha'])
