@@ -24,7 +24,6 @@ p.add_argument('--extension', '-e', default='mp4')
 p.add_argument('--debug', '-d', action='store_true')
 p.add_argument('--mute_ffmpeg', action='store_true')
 p.add_argument('--mute_waifu2x', action='store_true')
-p.add_argument("--copy_test", action='store_true')
 # the waifu2x module to use
 p.add_argument("--waifu2x", default="waifu2x_chainer")
 p.add_argument('--width', '-W', type=int, default=0)
@@ -107,9 +106,12 @@ def process_video(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
         if not in_bytes:
             break
 
+        img = Image.frombytes('RGB', (width, height), in_bytes, "raw", "RGB", 0, 1)
+
         process2.stdin.write(
-            func(in_bytes, width, height)
+            func(img).tobytes()
         )
+
         cnt += 1
         time_cost = (time.time() - start) / cnt
         time_left = str(datetime.timedelta(0, time_cost * (total_size - cnt)))
@@ -118,7 +120,7 @@ def process_video(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
                               name,
                               "time left: {}".format(time_left),
                               decimals=3,
-                              length=50)
+                              length=30)
 
     process2.stdin.close()
     process1.wait()
@@ -153,13 +155,6 @@ def process_video(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
         os.rename(tmpFileName, outputFileName)
 
 
-def save_bytes_frame(img, w, h):
-    img = Image.frombytes(mode="RGB", data=img, size=(w, h))
-    with open('frame.bytes', 'wb') as fp:
-        fp.write(img.tobytes())
-    return img.tobytes()
-
-
 # mute waifu2x output
 waifu2x.DEBUG = args.debug & (not args.mute_waifu2x)
 
@@ -173,23 +168,11 @@ if __name__ == "__main__":
     if args.height != 0:
         args.scale_ratio = args.height / height
 
-    if args.copy_test:
-        args.scale_ratio = 1.0
-        process_video(videoInfo,
-                      ''.join([videoInfo['General']['file_name'],
-                               "[processed].",
-                               args.extension]),
-                      save_bytes_frame,
-                      args.scale_ratio,
-                      vcodec=args.vcodec,
-                      acodec=args.acodec, )
-
-    else:
-        process_video(videoInfo,
-                      ''.join([videoInfo['General']['file_name'],
-                               "[processed].",
-                               args.extension]),
-                      waifu2x.process_frame,
-                      args.scale_ratio,
-                      vcodec=args.vcodec,
-                      acodec=args.acodec, )
+    process_video(videoInfo,
+                  ''.join([videoInfo['General']['file_name'],
+                           "[processed].",
+                           args.extension]),
+                  waifu2x.process_frame,
+                  args.scale_ratio,
+                  vcodec=args.vcodec,
+                  acodec=args.acodec, )

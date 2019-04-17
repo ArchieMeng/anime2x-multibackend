@@ -182,10 +182,7 @@ def load_models(cfg):
 
 
 # use waifu2x-chainer to process each frame
-def process_frame(img: bytes,
-                  width,
-                  height, ):
-    img = Image.frombytes('RGB', (width, height), img, "raw", "RGB", 0, 1)
+def process_frame(img: Image,) -> Image:
     if 'noise_scale' in models:
         img = upscale_image(
             args, img, models['noise_scale'], models['alpha'])
@@ -194,7 +191,7 @@ def process_frame(img: bytes,
             img = denoise_image(args, img, models['noise'])
         if 'scale' in models:
             img = upscale_image(args, img, models['scale'])
-    return img.tobytes()
+    return img
 
 
 models = load_models(args)
