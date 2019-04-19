@@ -9,6 +9,7 @@ import ffmpeg
 import six
 from PIL import Image
 from pymediainfo import MediaInfo
+import numpy as np
 
 import utils.utils as ut
 
@@ -85,7 +86,7 @@ def process_video(videoInfo, outputFileName, func, target_size, **kwargs):
                         **kwargs)
                 .overwrite_output()
                 .run_async(pipe_stdin=True,
-                           pipe_stderr=((not args.debug) or args.mute_ffmpeg))
+                           quiet=((not args.debug) or args.mute_ffmpeg))
         )
     else:
         process2 = (
@@ -96,7 +97,7 @@ def process_video(videoInfo, outputFileName, func, target_size, **kwargs):
                         r=videoInfo['Video']['frame_rate'], **kwargs)
                 .overwrite_output()
                 .run_async(pipe_stdin=True,
-                           pipe_stderr=((not args.debug) or args.mute_ffmpeg))
+                           quiet=((not args.debug) or args.mute_ffmpeg))
         )
 
     ut.print_progress_bar(0, total_size, name, "time left: N/A", length=30)
@@ -112,7 +113,7 @@ def process_video(videoInfo, outputFileName, func, target_size, **kwargs):
                               in_bytes,)
 
         img = func(img)
-        img = img.tobytes()
+        img = np.array(img).astype(np.uint8).tobytes()
 
         process2.stdin.write(img)
         # # ignore process2 output

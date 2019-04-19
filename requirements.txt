@@ -1,5 +1,5 @@
 chainer
-ffmpeg-python
+git+https://github.com/ArchieMeng/ffmpeg-python
 future
 numpy
 Pillow
