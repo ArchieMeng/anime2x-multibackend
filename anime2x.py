@@ -1,10 +1,12 @@
 import datetime
 import importlib
 import os
+import sys
 import time
 
 import argparse
 import ffmpeg
+import six
 from PIL import Image
 from pymediainfo import MediaInfo
 
@@ -17,24 +19,23 @@ programDir = os.path.dirname(__file__)
 p = argparse.ArgumentParser()
 p.add_argument('--vcodec', default="libx264")
 p.add_argument('--acodec', default="copy")
-p.add_argument('--scale_ratio', '-s', type=float, default=2.0)
 p.add_argument('--input', '-i', default='test.mp4')
 p.add_argument('--output_dir', '-o', default='./')
 p.add_argument('--extension', '-e', default='mp4')
-p.add_argument('--debug', '-d', action='store_true')
+p.add_argument('--debug', '-D', action='store_true')
 p.add_argument('--mute_ffmpeg', action='store_true')
 p.add_argument('--mute_waifu2x', action='store_true')
+p.add_argument('--diff_based', '-DF', action='store_true')
+p.add_argument('--block_size', '-B', type=int, default=400)
+
 # the waifu2x module to use
 p.add_argument("--waifu2x", default="waifu2x_chainer")
-p.add_argument('--width', '-W', type=int, default=0)
-p.add_argument('--height', '-H', type=int, default=0)
 
 args, unknown = p.parse_known_args()
-
 waifu2x = importlib.import_module('.'.join(("utils", args.waifu2x)))
 
 
-def process_video(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
+def process_video(videoInfo, outputFileName, func, target_size, **kwargs):
     """
     Process video frames one by one using "func"
     :param videoInfo:
@@ -60,16 +61,17 @@ def process_video(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
                     pix_fmt='rgb24',
                     r=videoInfo['Video']['frame_rate'])
             .run_async(pipe_stdout=True,
-                       quiet=(not args.debug) | args.mute_ffmpeg)
+                       pipe_stderr=((not args.debug) or args.mute_ffmpeg))
     )
 
     if 'Audio' in videoInfo:
+
         audioStream = ffmpeg.input(name)['a']
         videoStream = (
             ffmpeg
                 .input('pipe:', format='rawvideo', pix_fmt='rgb24',
-                       s='{}x{}'.format(int(width * args.scale_ratio),
-                                        int(height * args.scale_ratio)))
+                       s='{}x{}'.format(target_size[0],
+                                        target_size[1]))
         )
 
         process2 = (
@@ -83,22 +85,21 @@ def process_video(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
                         **kwargs)
                 .overwrite_output()
                 .run_async(pipe_stdin=True,
-                           quiet=(not args.debug) | args.mute_ffmpeg)
+                           pipe_stderr=((not args.debug) or args.mute_ffmpeg))
         )
     else:
         process2 = (
             ffmpeg
                 .input('pipe:', format='rawvideo', pix_fmt='rgb24',
-                       s='{}x{}'.format(int(width * args.scale_ratio), int(height * args.scale_ratio)))
-                .output(tmpFileName, pix_fmt='yuv420p', r=videoInfo['Video']['frame_rate'], **kwargs)
+                       s='{}x{}'.format(target_size[0], target_size[1]))
+                .output(tmpFileName, pix_fmt='yuv420p',
+                        r=videoInfo['Video']['frame_rate'], **kwargs)
                 .overwrite_output()
-                .run_async(pipe_stdin=True, quiet=(not args.debug) | args.mute_ffmpeg)
+                .run_async(pipe_stdin=True,
+                           pipe_stderr=((not args.debug) or args.mute_ffmpeg))
         )
 
-    ut.print_progress_bar(0, total_size, name, "time left: N/A", length=50)
-
-    time_cost = float(
-        'inf')  # this will be used as time_out for result in CPU mode
+    ut.print_progress_bar(0, total_size, name, "time left: N/A", length=30)
 
     start = time.time()
     while True:
@@ -106,11 +107,18 @@ def process_video(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
         if not in_bytes:
             break
 
-        img = Image.frombytes('RGB', (width, height), in_bytes, "raw", "RGB", 0, 1)
+        img = Image.frombytes('RGB',
+                              (width, height),
+                              in_bytes,)
 
-        process2.stdin.write(
-            func(img).tobytes()
-        )
+        img = func(img)
+        img = img.tobytes()
+
+        process2.stdin.write(img)
+        # # ignore process2 output
+        # with open('ffmpeg.out', 'a') as fp:
+        #     fp.write(process2.stdout.readl(process2.stdout.peek(1)))
+        #     fp.write(process2.stderr.readl(process2.stderr.peek(1)))
 
         cnt += 1
         time_cost = (time.time() - start) / cnt
@@ -129,7 +137,7 @@ def process_video(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
     tmpFileInfo = {track.track_type: track.to_data()
                    for track in MediaInfo.parse(tmpFileName).tracks}
     if tmpFileInfo['Video']['frame_count'] != videoInfo['Video']['frame_count']:
-        print("correcting video stream")
+        six.print_("syncing video stream and audio stream")
         tmpFramesCount, correctFrameCount = (
         tmpFileInfo['Video']['frame_count'],
         videoInfo['Video']['frame_count'])
@@ -149,7 +157,7 @@ def process_video(videoInfo, outputFileName, func, ratio=2.0, **kwargs):
                  r=videoInfo['Video']['frame_rate'],
                  **kwargs)
          .overwrite_output()
-         .run())
+         .run(quiet=True))
         os.remove(tmpFileName)
     else:
         os.rename(tmpFileName, outputFileName)
@@ -163,16 +171,25 @@ if __name__ == "__main__":
                  for track in MediaInfo.parse(args.input).tracks}
     width, height = videoInfo['Video']['width'], videoInfo['Video']['height']
 
-    if args.width != 0:
-        args.scale_ratio = args.width / width
-    if args.height != 0:
-        args.scale_ratio = args.height / height
+    # test waifu2x backend, and get the size of target video
+    im = waifu2x.process_frame(Image.new("RGB", (width, height)))
+    process_frame = waifu2x.process_frame
+
+    # apply diff based process frame function (only process different block)
+    if args.diff_based:
+        process_frame = ut.get_block_diff_based_process_func(
+            (args.block_size, args.block_size),
+            (width, height),
+            im.size,
+            im.mode,
+            process_frame
+        )
 
     process_video(videoInfo,
                   ''.join([videoInfo['General']['file_name'],
                            "[processed].",
                            args.extension]),
-                  waifu2x.process_frame,
-                  args.scale_ratio,
+                  process_frame,
+                  im.size,
                   vcodec=args.vcodec,
-                  acodec=args.acodec, )
+                  acodec=args.acodec,)
