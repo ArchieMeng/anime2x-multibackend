@@ -18,30 +18,42 @@ import utils.utils as ut
 programDir = os.path.dirname(__file__)
 
 p = argparse.ArgumentParser()
-p.add_argument('--vcodec', default="libx264")
-p.add_argument('--acodec', default="copy")
+p.add_argument('--vcodec', default="libx264",
+               help="The codec of output video stream in ffmpeg")
+p.add_argument('--acodec', default="copy",
+               help="The codec of output audio stream")
 p.add_argument('--input', '-i', default='test.mp4')
-p.add_argument('--output_dir', '-o', default='./')
+p.add_argument('--output', '-o', default='./',
+               help="Output dir or output name")
 p.add_argument('--extension', '-e', default='mp4')
 p.add_argument('--debug', '-D', action='store_true')
 p.add_argument('--mute_ffmpeg', action='store_true')
 p.add_argument('--mute_waifu2x', action='store_true')
-p.add_argument('--diff_based', '-DF', action='store_true')
-p.add_argument('--block_size', '-B', type=int, default=400)
+p.add_argument('--diff_based', '-DF',
+               action='store_true',
+               help="""Enable difference based processing.
+               In this mode, anime2x will only process changed frames blocks
+               instead of the whole frames""")
+p.add_argument('--block_size', '-B',
+               type=int, default=400,
+               help="The size of blocks in difference based operation")
 
 # the waifu2x module to use
-p.add_argument("--waifu2x", default="waifu2x_chainer")
+p.add_argument("--waifu2x", default="waifu2x_chainer",
+               help="""The waifu2x module to use. 
+               By default, waifu2x-chainer is used""")
 
 args, unknown = p.parse_known_args()
 waifu2x = importlib.import_module('.'.join(("utils", args.waifu2x)))
 
 
-def process_video(videoInfo, outputFileName, func, target_size, **kwargs):
+def process_video(videoInfo, output_, func, target_size, **kwargs):
     """
     Process video frames one by one using "func"
-    :param videoInfo:
-    :param outputFileName:
-    :param func:
+    :param target_size: size of output video file
+    :param videoInfo: mediainfo dict of input video file
+    :param output_: output path
+    :param func: function to process frames
     :return:
     """
 
@@ -52,7 +64,7 @@ def process_video(videoInfo, outputFileName, func, target_size, **kwargs):
     name = videoInfo['General']['complete_name']
     tmpFileName = (videoInfo['General']['file_name']
                    + '_tmp.'
-                   + outputFileName.split('.')[-1])
+                   + output_.split('.')[-1])
 
     process1 = (
         ffmpeg
@@ -113,7 +125,7 @@ def process_video(videoInfo, outputFileName, func, target_size, **kwargs):
                               in_bytes,)
 
         img = func(img)
-        img = np.array(img).astype(np.uint8).tobytes()
+        img = np.array(img).tobytes()
 
         process2.stdin.write(img)
         # # ignore process2 output
@@ -153,7 +165,7 @@ def process_video(videoInfo, outputFileName, func, target_size, **kwargs):
         (ffmpeg
          .output(videoStream,
                  audioStream,
-                 outputFileName,
+                 output_,
                  pix_fmt='yuv420p',
                  r=videoInfo['Video']['frame_rate'],
                  **kwargs)
@@ -161,36 +173,75 @@ def process_video(videoInfo, outputFileName, func, target_size, **kwargs):
          .run(quiet=True))
         os.remove(tmpFileName)
     else:
-        os.rename(tmpFileName, outputFileName)
+        os.rename(tmpFileName, output_)
 
 
 # mute waifu2x output
 waifu2x.DEBUG = args.debug & (not args.mute_waifu2x)
 
 if __name__ == "__main__":
-    videoInfo = {track.track_type: track.to_data()
-                 for track in MediaInfo.parse(args.input).tracks}
-    width, height = videoInfo['Video']['width'], videoInfo['Video']['height']
 
-    # test waifu2x backend, and get the size of target video
-    im = waifu2x.process_frame(Image.new("RGB", (width, height)))
-    process_frame = waifu2x.process_frame
+    files = []
+    if os.path.isdir(args.input):
+        files = os.listdir(args.input)
+    else:
+        files.append(args.input)
 
-    # apply diff based process frame function (only process different block)
-    if args.diff_based:
-        process_frame = ut.get_block_diff_based_process_func(
-            (args.block_size, args.block_size),
-            (width, height),
-            im.size,
-            im.mode,
-            process_frame
-        )
+    output_dir = './'
+    output_name = ""
+    if os.path.isdir(args.output):
+        output_dir = output_dir
+    else:
+        output_name = args.output
 
-    process_video(videoInfo,
-                  ''.join([videoInfo['General']['file_name'],
-                           "[processed].",
-                           args.extension]),
-                  process_frame,
-                  im.size,
-                  vcodec=args.vcodec,
-                  acodec=args.acodec,)
+    for file in files:
+        if os.path.isdir(file):  # bypass directory
+            continue
+
+        videoInfo = {track.track_type: track.to_data()
+                     for track in MediaInfo.parse(file).tracks}
+        if 'Video' not in videoInfo:  # bypass non-video files
+            continue
+
+        width, height = videoInfo['Video']['width'], \
+                        videoInfo['Video']['height']
+
+        # test waifu2x backend, and get the size of target video
+        im = waifu2x.process_frame(Image.new("RGB", (width, height)))
+        process_frame = waifu2x.process_frame
+
+        # apply diff based process frame function
+        # (only process different block)
+        if args.diff_based:
+            process_frame = ut.get_block_diff_based_process_func(
+                (args.block_size, args.block_size),
+                (width, height),
+                im.size,
+                im.mode,
+                process_frame
+            )
+
+        if output_name:
+            output_path = os.path.join(output_dir, output_name)
+        else:
+            output_path = os.path.join(output_dir,
+                                       ''.join(
+                                           [str(videoInfo['General'][
+                                                    'file_name']),
+                                            '.',
+                                            args.extension])
+                                       )
+
+        # when output dir is specific and output files exist
+        if os.path.exists(output_path) and output_name == "":
+            output_path = os.path.join(output_dir, ''.join(
+                [str(videoInfo['General']['file_name']),
+                 "[{}X{}]".format(im.size[0], im.size[1]), '.',
+                 args.extension]))
+
+        process_video(videoInfo,
+                      output_path,
+                      process_frame,
+                      im.size,
+                      vcodec=args.vcodec,
+                      acodec=args.acodec,)

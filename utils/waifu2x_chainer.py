@@ -44,15 +44,14 @@ p.add_argument('--method', '-m', choices=['noise', 'scale', 'noise_scale'],
                default='scale')
 p.add_argument('--scale_ratio', '-s', type=float, default=2.0)
 p.add_argument('--noise_level', '-n', type=int, choices=[0, 1, 2, 3],
-               default=0)
+               default=1)
 p.add_argument('--color', '-c', choices=['y', 'rgb'], default='rgb')
 p.add_argument('--tta', '-t', action='store_true')
 p.add_argument('--tta_level', '-T', type=int, choices=[2, 4, 8], default=8)
 p.add_argument('--batch_size', '-b', type=int, default=16)
 p.add_argument('--block_size', '-l', type=int, default=128)
-g = p.add_mutually_exclusive_group()
-g.add_argument('--width', '-W', type=int, default=0)
-g.add_argument('--height', '-H', type=int, default=0)
+p.add_argument('--width', '-W', type=int, default=0)
+p.add_argument('--height', '-H', type=int, default=0)
 
 args, _ = p.parse_known_args()
 if args.arch in srcnn.table:
