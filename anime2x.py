@@ -182,7 +182,9 @@ waifu2x.DEBUG = args.debug & (not args.mute_waifu2x)
 if __name__ == "__main__":
 
     files = []
+    input_dir = '.'
     if os.path.isdir(args.input):
+        input_dir = args.input
         files = os.listdir(args.input)
     else:
         files.append(args.input)
@@ -194,7 +196,7 @@ if __name__ == "__main__":
     else:
         output_name = args.output
 
-    for file in files:
+    for file in map(lambda x: os.path.join(input_dir, x), files):
         if os.path.isdir(file):  # bypass directory
             continue
 

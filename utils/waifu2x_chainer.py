@@ -63,7 +63,7 @@ DEBUG = False
 
 def debug_print(*args, **kwargs):
     if DEBUG:
-        six.print_(*args, **kwargs)
+        six.print_(file=sys.stderr, *args, **kwargs)
 
 
 def denoise_image(cfg, src, model):
