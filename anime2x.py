@@ -18,10 +18,15 @@ import utils.utils as ut
 programDir = os.path.dirname(__file__)
 
 p = argparse.ArgumentParser()
-p.add_argument('--vcodec', default="libx264",
-               help="The codec of output video stream in ffmpeg")
+p.add_argument('--vcodec', default="copy",
+               help="The codec of output video stream(s) in ffmpeg")
 p.add_argument('--acodec', default="copy",
-               help="The codec of output audio stream")
+               help="The codec of output audio stream(s)")
+p.add_argument('--crf', default=23,
+               help="CRF setting for video encoding")
+p.add_argument('--pix_fmt', default="yuv420p",
+               help="pixel format for output video(s)")
+
 p.add_argument('--input', '-i', default='test.mp4')
 p.add_argument('--output', '-o', default='./',
                help="Output dir or output name")
@@ -35,7 +40,7 @@ p.add_argument('--diff_based', '-DF',
                In this mode, anime2x will only process changed frames blocks
                instead of the whole frames""")
 p.add_argument('--block_size', '-B',
-               type=int, default=400,
+               type=int, default=128,
                help="The size of blocks in difference based operation")
 
 # the waifu2x module to use
@@ -92,7 +97,7 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
                 .output(videoStream,
                         audioStream,
                         tmpFileName,
-                        pix_fmt='yuv420p',
+                        pix_fmt=args.pix_fmt,
                         strict='experimental',
                         r=videoInfo['Video']['frame_rate'],
                         **kwargs)
@@ -105,7 +110,7 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
             ffmpeg
                 .input('pipe:', format='rawvideo', pix_fmt='rgb24',
                        s='{}x{}'.format(target_size[0], target_size[1]))
-                .output(tmpFileName, pix_fmt='yuv420p',
+                .output(tmpFileName, pix_fmt=args.pix_fmt,
                         r=videoInfo['Video']['frame_rate'], **kwargs)
                 .overwrite_output()
                 .run_async(pipe_stdin=True,
@@ -166,7 +171,7 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
          .output(videoStream,
                  audioStream,
                  output_,
-                 pix_fmt='yuv420p',
+                 pix_fmt=args.pix_fmt,
                  r=videoInfo['Video']['frame_rate'],
                  **kwargs)
          .overwrite_output()
@@ -209,7 +214,8 @@ if __name__ == "__main__":
                         videoInfo['Video']['height']
 
         # test waifu2x backend, and get the size of target video
-        im = waifu2x.process_frame(Image.new("RGB", (width, height)))
+        im = waifu2x.process_frame(Image.new("RGB", (width, height)),
+                                   dry_run=True)
         process_frame = waifu2x.process_frame
 
         # apply diff based process frame function
@@ -246,4 +252,5 @@ if __name__ == "__main__":
                       process_frame,
                       im.size,
                       vcodec=args.vcodec,
-                      acodec=args.acodec,)
+                      acodec=args.acodec,
+                      crf=args.crf)

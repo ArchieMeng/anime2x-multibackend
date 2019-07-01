@@ -181,7 +181,14 @@ def load_models(cfg):
 
 
 # use waifu2x-chainer to process each frame
-def process_frame(img: Image,) -> Image:
+def process_frame(img: Image, **kwargs) -> Image:
+    if kwargs.get("dry_run", False):
+        w, h = img.size
+        if args.width != 0:
+            args.scale_ratio = args.width / w
+        if args.height != 0:
+            args.scale_ratio = args.height / h
+
     if 'noise_scale' in models:
         img = upscale_image(
             args, img, models['noise_scale'], models['alpha'])
