@@ -18,7 +18,7 @@ import utils.utils as ut
 programDir = os.path.dirname(__file__)
 
 p = argparse.ArgumentParser()
-p.add_argument('--vcodec', default="copy",
+p.add_argument('--vcodec', default="libx264",
                help="The codec of output video stream(s) in ffmpeg")
 p.add_argument('--acodec', default="copy",
                help="The codec of output audio stream(s)")
