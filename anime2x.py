@@ -39,8 +39,7 @@ p.add_argument('--diff_based', '-DF',
                help="""Enable difference based processing.
                In this mode, anime2x will only process changed frames blocks
                instead of the whole frames""")
-p.add_argument('--block_size', '-B',
-               type=int, default=128,
+p.add_argument('--block_size', '-B', default=None,
                help="The size of blocks in difference based operation")
 
 # the waifu2x module to use
@@ -67,9 +66,9 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
                           * float(videoInfo['General']['frame_rate'])
                           / 1000)
     name = videoInfo['General']['complete_name']
-    tmpFileName = (videoInfo['General']['file_name']
+    tmpFileName = (str(videoInfo['General']['file_name'])
                    + '_tmp.'
-                   + output_.split('.')[-1])
+                   + str(output_.split('.')[-1]))
 
     process1 = (
         ffmpeg
@@ -151,6 +150,8 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
     process2.stdin.close()
     process1.wait()
     process2.wait()
+    six.print_()
+    six.print_("processing time: " + str(datetime.timedelta(0, time.time() - start)))
 
     tmpFileInfo = {track.track_type: track.to_data()
                    for track in MediaInfo.parse(tmpFileName).tracks}
@@ -172,10 +173,11 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
                  audioStream,
                  output_,
                  pix_fmt=args.pix_fmt,
+                 strict='experimental',
                  r=videoInfo['Video']['frame_rate'],
                  **kwargs)
          .overwrite_output()
-         .run(quiet=True))
+         .run(quiet=((not args.debug) or args.mute_ffmpeg)))
         os.remove(tmpFileName)
     else:
         os.rename(tmpFileName, output_)
@@ -187,11 +189,12 @@ waifu2x.DEBUG = args.debug & (not args.mute_waifu2x)
 if __name__ == "__main__":
 
     files = []
-    input_dir = '.'
+
     if os.path.isdir(args.input):
         input_dir = args.input
         files = os.listdir(args.input)
     else:
+        input_dir = '.'
         files.append(args.input)
 
     output_dir = './'
@@ -221,6 +224,11 @@ if __name__ == "__main__":
         # apply diff based process frame function
         # (only process different block)
         if args.diff_based:
+            from math import gcd
+            # use the optimized block size for DF mode but
+            # remain a minimal size requirement of 80
+            args.block_size = args.block_size or max(gcd(*im.size), 80)
+
             process_frame = ut.get_block_diff_based_process_func(
                 (args.block_size, args.block_size),
                 (width, height),
