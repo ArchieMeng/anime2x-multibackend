@@ -1,15 +1,14 @@
+import argparse
 import datetime
 import importlib
 import os
-import sys
 import time
 
-import argparse
 import ffmpeg
+import numpy as np
 import six
 from PIL import Image
 from pymediainfo import MediaInfo
-import numpy as np
 
 import utils.utils as ut
 
@@ -39,7 +38,7 @@ p.add_argument('--diff_based', '-DF',
                help="""Enable difference based processing.
                In this mode, anime2x will only process changed frames blocks
                instead of the whole frames""")
-p.add_argument('--block_size', '-B', default=None,
+p.add_argument('--block_size', '-B', default=None, type=int,
                help="The size of blocks in difference based operation")
 
 # the waifu2x module to use
@@ -200,7 +199,7 @@ if __name__ == "__main__":
     output_dir = './'
     output_name = ""
     if os.path.isdir(args.output):
-        output_dir = output_dir
+        output_dir = args.output
     else:
         output_name = args.output
 
@@ -227,7 +226,7 @@ if __name__ == "__main__":
             from math import gcd
             # use the optimized block size for DF mode but
             # remain a minimal size requirement of 80
-            args.block_size = args.block_size or max(gcd(*im.size), 80)
+            args.block_size = max(args.block_size or gcd(*im.size), 80)
 
             process_frame = ut.get_block_diff_based_process_func(
                 (args.block_size, args.block_size),

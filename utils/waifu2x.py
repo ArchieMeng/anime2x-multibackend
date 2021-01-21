@@ -1,7 +1,6 @@
 import argparse
-import subprocess
 import os
-import io
+import subprocess
 import sys
 
 from PIL import Image
@@ -28,7 +27,7 @@ args.add_argument("--scale_level",
 
 args.add_argument("--tile_size",
                   "-t",
-                  default=128, )
+                  default=0, )
 
 args.add_argument("--model_path",
                   "-m",
@@ -55,26 +54,44 @@ def process_frame(im: Image, **kwargs) -> Image:
                       " under utils directory!!!")
 
         # with waifu2x-ncnn-vulkan installed
-        p = subprocess.Popen(args=(executable,
-                                   '-i', "/dev/stdin",
-                                   '-o', "/dev/stdout",
-                                   '-n', str(params.noise_level),
-                                   '-s', str(params.scale_level),
-                                   '-t', str(params.tile_size),
-                                   '-m', params.model_path),
-                             stdin=subprocess.PIPE,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.DEVNULL,
-                             shell=False,
-                             cwd=waifu2x_dir)
+        # p = subprocess.Popen(args=(executable,
+        #                            '-i', "/dev/stdin",
+        #                            '-o', "/dev/stdout",
+        #                            '-n', str(params.noise_level),
+        #                            '-s', str(params.scale_level),
+        #                            '-t', str(params.tile_size),
+        #                            '-m', params.model_path),
+        #                      stdin=subprocess.PIPE,
+        #                      stdout=subprocess.PIPE,
+        #                      stderr=subprocess.DEVNULL,
+        #                      shell=False,
+        #                      cwd=waifu2x_dir)
+        #
+        # bytes_io = io.BytesIO()
+        # im.save(bytes_io, format="PNG")
+        # p.stdin.write(bytes_io.getvalue())
+        # p.stdin.close()
+        # bytes_io.seek(0)
+        # bytes_io.write(p.stdout.read())
+        # im = Image.open(bytes_io)
+        # return im
 
-        bytes_io = io.BytesIO()
-        im.save(bytes_io, format="PNG")
-        p.stdin.write(bytes_io.getvalue())
-        p.stdin.close()
-        bytes_io.seek(0)
-        bytes_io.write(p.stdout.read())
-        im = Image.open(bytes_io)
+        temp_filename = "temp.png"
+        im.save(os.path.join("/tmp", temp_filename))
+        process = subprocess.run(args=(executable,
+                                       '-i', os.path.join("/tmp", temp_filename),
+                                       '-o', os.path.join("/tmp", temp_filename),
+                                       '-n', str(params.noise_level),
+                                       '-s', str(params.scale_level),
+                                       '-t', str(params.tile_size),
+                                       '-m', os.path.join(waifu2x_dir, params.model_path)),
+                                 stderr=subprocess.DEVNULL,
+                                 shell=False)
+        with Image.open(os.path.join("/tmp", temp_filename)) as temp_im:
+            # copy to memory without occupying the temp file on windows
+            im = temp_im.copy()
+
+        os.remove(os.path.join("/tmp", temp_filename))
         return im
 
     # Todo implement this platform specific parts

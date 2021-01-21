@@ -1,6 +1,6 @@
 chainer
-git+https://github.com/ArchieMeng/ffmpeg-python
 future
+git+https://github.com/0x3333/ffmpeg-python
 numpy
 Pillow
 pymediainfo
