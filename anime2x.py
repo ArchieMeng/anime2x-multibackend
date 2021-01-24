@@ -61,9 +61,11 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
     """
 
     width, height = videoInfo['Video']['width'], videoInfo['Video']['height']
-    cnt, total_size = 0, (videoInfo['General']['duration']
-                          * float(videoInfo['General']['frame_rate'])
-                          / 1000)
+    if 'framerate_num' in videoInfo['Video'] and 'framerate_den' in videoInfo['Video']:
+        frame_rate = float(videoInfo['Video']['framerate_num']) / float(videoInfo['Video']['framerate_den'])
+    else:
+        frame_rate = float(videoInfo['Video']['frame_rate'])
+    cnt, total_size = 0, (videoInfo['General']['duration'] * frame_rate / 1000)
     name = videoInfo['General']['complete_name']
     tmpFileName = (str(videoInfo['General']['file_name'])
                    + '_tmp.'
@@ -75,7 +77,7 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
             .output('pipe:',
                     format='rawvideo',
                     pix_fmt='rgb24',
-                    r=videoInfo['Video']['frame_rate'])
+                    r=frame_rate)
             .run_async(pipe_stdout=True,
                        pipe_stderr=((not args.debug) or args.mute_ffmpeg))
     )
@@ -97,7 +99,7 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
                         tmpFileName,
                         pix_fmt=args.pix_fmt,
                         strict='experimental',
-                        r=videoInfo['Video']['frame_rate'],
+                        r=frame_rate,
                         **kwargs)
                 .overwrite_output()
                 .run_async(pipe_stdin=True,
@@ -109,7 +111,7 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
                 .input('pipe:', format='rawvideo', pix_fmt='rgb24',
                        s='{}x{}'.format(target_size[0], target_size[1]))
                 .output(tmpFileName, pix_fmt=args.pix_fmt,
-                        r=videoInfo['Video']['frame_rate'], **kwargs)
+                        r=frame_rate, **kwargs)
                 .overwrite_output()
                 .run_async(pipe_stdin=True,
                            quiet=((not args.debug) or args.mute_ffmpeg))
