@@ -38,8 +38,6 @@ p.add_argument('--diff_based', '-DF',
                help="""Enable difference based processing.
                In this mode, anime2x will only process changed frames blocks
                instead of the whole frames""")
-p.add_argument('--block_size', '-B', default=None, type=int,
-               help="The size of blocks in difference based operation")
 
 # the waifu2x module to use
 p.add_argument("--waifu2x", default="waifu2x_chainer",
@@ -61,9 +59,11 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
     """
 
     width, height = videoInfo['Video']['width'], videoInfo['Video']['height']
-    cnt, total_size = 0, (videoInfo['General']['duration']
-                          * float(videoInfo['General']['frame_rate'])
-                          / 1000)
+    if 'framerate_num' in videoInfo['Video'] and 'framerate_den' in videoInfo['Video']:
+        frame_rate = float(videoInfo['Video']['framerate_num']) / float(videoInfo['Video']['framerate_den'])
+    else:
+        frame_rate = float(videoInfo['Video']['frame_rate'])
+    cnt, total_size = 0, (videoInfo['General']['duration'] * frame_rate / 1000)
     name = videoInfo['General']['complete_name']
     tmpFileName = (str(videoInfo['General']['file_name'])
                    + '_tmp.'
@@ -75,7 +75,7 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
             .output('pipe:',
                     format='rawvideo',
                     pix_fmt='rgb24',
-                    r=videoInfo['Video']['frame_rate'])
+                    r=frame_rate)
             .run_async(pipe_stdout=True,
                        pipe_stderr=((not args.debug) or args.mute_ffmpeg))
     )
@@ -97,7 +97,7 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
                         tmpFileName,
                         pix_fmt=args.pix_fmt,
                         strict='experimental',
-                        r=videoInfo['Video']['frame_rate'],
+                        r=frame_rate,
                         **kwargs)
                 .overwrite_output()
                 .run_async(pipe_stdin=True,
@@ -109,7 +109,7 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
                 .input('pipe:', format='rawvideo', pix_fmt='rgb24',
                        s='{}x{}'.format(target_size[0], target_size[1]))
                 .output(tmpFileName, pix_fmt=args.pix_fmt,
-                        r=videoInfo['Video']['frame_rate'], **kwargs)
+                        r=frame_rate, **kwargs)
                 .overwrite_output()
                 .run_async(pipe_stdin=True,
                            quiet=((not args.debug) or args.mute_ffmpeg))
@@ -137,7 +137,7 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
         #     fp.write(process2.stderr.readl(process2.stderr.peek(1)))
 
         cnt += 1
-        time_cost = (time.time() - start) / cnt
+        time_cost = round((time.time() - start) / cnt, 1)
         time_left = str(datetime.timedelta(0, time_cost * (total_size - cnt)))
         ut.print_progress_bar(cnt,
                               total_size,
@@ -215,21 +215,22 @@ if __name__ == "__main__":
         width, height = videoInfo['Video']['width'], \
                         videoInfo['Video']['height']
 
-        # test waifu2x backend, and get the size of target video
+        # test waifu2x backend, and get the size of target video as well as time cost of a full frame process
+        cost = time.time()
         im = waifu2x.process_frame(Image.new("RGB", (width, height)),
                                    dry_run=True)
+        cost = time.time() - cost
         process_frame = waifu2x.process_frame
 
         # apply diff based process frame function
         # (only process different block)
         if args.diff_based:
             from math import gcd
-            # use the optimized block size for DF mode but
-            # remain a minimal size requirement of 80
-            args.block_size = max(args.block_size or gcd(*im.size), 80)
 
+            ut.sl, ut.ss = max(width, height), min(width, height)
+            ut.proc_costs = ut.get_processing_timecosts(process_frame)
+            ut.proc_costs[ut.sl] = cost
             process_frame = ut.get_block_diff_based_process_func(
-                (args.block_size, args.block_size),
                 (width, height),
                 im.size,
                 im.mode,
