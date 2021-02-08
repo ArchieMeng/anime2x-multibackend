@@ -2,7 +2,12 @@ import os
 
 from PIL import Image
 
-import utils.waifu2x_ncnn_vulkan_wrapper as raw
+if __package__:
+    import importlib
+
+    raw = importlib.import_module(f'{__package__}.waifu2x_ncnn_vulkan_wrapper')
+else:
+    import waifu2x_ncnn_vulkan_wrapper as raw
 
 
 class Waifu2x:

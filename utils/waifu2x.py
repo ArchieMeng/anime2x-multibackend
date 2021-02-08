@@ -3,7 +3,10 @@ import os
 
 from PIL import Image
 
-from utils.waifu2x_ncnn_vulkan import Waifu2x
+if __package__ or '.' in __name__:
+    from .waifu2x_ncnn_vulkan import Waifu2x
+else:
+    from waifu2x_ncnn_vulkan import Waifu2x
 
 waifu2x_dir = os.path.dirname(__file__) or '.'
 args = argparse.ArgumentParser()
