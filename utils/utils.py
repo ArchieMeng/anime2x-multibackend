@@ -1,8 +1,15 @@
+import time
+
 import numpy as np
 import six
 from PIL import Image
 
 from .terminalsize import get_terminal_size
+
+proc_costs = dict()
+bs_min, bs_step = (64, 64)
+# Source long edge size, Source short edge size. They will be initialized with real values in importer module(s).
+sl, ss = 512, 512
 
 
 def static_var(**kwargs):
@@ -41,8 +48,8 @@ def print_progress_bar(iteration,
     """
     percent = ("{0:." + str(decimals) + "f}").format(
         100 * (iteration / float(total)))
-    filledLength = int(length * iteration // total)
-    bar = fill * filledLength + '-' * (length - filledLength)
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
 
     width, _ = get_terminal_size()
     print_length = len('%s |%s| %s%% %s' % (prefix, bar, percent, suffix))
@@ -50,52 +57,104 @@ def print_progress_bar(iteration,
         ignored_length = print_length + 10 - width
         prefix = prefix[:(len(prefix) - ignored_length) // 2] + '....' + prefix[(len(prefix) + ignored_length) // 2:]
 
+    # os.system(clear_cmd)
     six.print_('%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end='\r')
     # Print New Line on Complete
     if iteration == total:
         print()
 
 
-# Todo add 2-passes block diff based auto accelerate method.
+def get_processing_timecosts(proc_func_) -> dict:
+    costs = dict()
+    for bs in range(bs_min, ss + 1, bs_step):
+        im = Image.new('RGB', (bs, bs))
+        im_barray = np.array(im)
+        t = time.time()
+        np.array(im) - im_barray
+        proc_func_(im)
+        costs[bs] = time.time() - t
+    return costs
 
 
-def get_block_diff_based_process_func(block_size_,
-                                      size_,
+def diff_cmp(param: np.ndarray):
+    return param.std() > 5
+
+
+def choose_best_diff_block_size(diff: np.ndarray, size_, proc_func_):
+    sw, sh = size_
+    best_sz = sl  # represents all blocks are different, full frame process needed
+    best_cnt = 1
+
+    diff_locations = [(0, 0)]  # locations (width-offset, height-offset) of different blocks
+    for bs in proc_costs.keys():
+        bw = bh = bs
+        cur_diff_locations = []
+        # in case block running out of image borders.
+        iw_edge, ih_edge = max(0, sw - bw), max(0, sh - bh)  # max image width and image height
+        for iw in map(lambda x: min(iw_edge, x), range(0, sw, bw)):
+            for ih in map(lambda x: min(ih_edge, x), range(0, sh, bh)):
+                if diff_cmp(diff[ih: ih + bh, iw: iw + bw, :]):
+                    cur_diff_locations.append((iw, ih))
+
+        if (cnt := len(cur_diff_locations)) > 0:
+            if best_cnt * proc_costs[best_sz] > cnt * proc_costs[bs]:
+                best_sz = bs
+                best_cnt = cnt
+                diff_locations = cur_diff_locations
+        else:  # identical frames, skip
+            return bs, []
+    return best_sz, diff_locations
+
+
+def get_block_diff_based_process_func(size_,
                                       target_size,
                                       im_type,
                                       proc_func_, ):
+    """
+    get a wrapped process function that will only process the difference parts between previous frame and current frame
+
+    :param size_: source frame size which is the size of original video
+    :param target_size: the size of target output video
+    :param im_type: the type of image frame
+    :param proc_func_: the processing function to be wrapped
+    :return: a wrapped diff-based processing function
+    """
+
     @static_var(pre_frame=Image.new(im_type, size_),
                 pre_result=Image.new(im_type, target_size), )
     def proc(im_: Image):
+        """
+        do the actual process of a frame image
 
-        # current frame bytes: numpy.array,
-        # previous frame bytes: numpy.Array,
-        # previous result bytes: numpy.Array
+        :param im_: image to be process on
+        :return:
+        """
+
+        # current frame bytes: numpy.ndarray,
+        # previous frame bytes: numpy.ndarray,
+        # previous result bytes: numpy.ndarray
         im_bytes, pre_fbytes, pre_rbytes = (np.array(im_),
                                             np.array(proc.pre_frame),
                                             np.array(proc.pre_result))
-        diff = im_bytes - pre_fbytes
-        sw, sh = size_  # original size (width, height)
+        diff = im_bytes - pre_fbytes  # difference array calculated directly be minus them
+        sw, sh = size_  # source size (width, height)
         tw, th = target_size  # target frame size (width, height)
-        bw, bh = block_size_  # block size (width, height)
+        bs, diff_locations = choose_best_diff_block_size(diff, size_, proc_func_)
+        bw = bh = bs
 
-        # in case block running out of image borders.
-        iw_edge, ih_edge = max(0, sw - bw), max(0, sh - bh)  # max iw and ih
-        for iw in map(lambda x: min(iw_edge, x), range(0, sw, bw)):
-            for ih in map(lambda x: min(ih_edge, x), range(0, sh, bh)):
-
-                #  source image width dim destination,
-                #  source image height dim destination
-                sw_des, sh_des = min(iw + bw, sw), min(ih + bh, sh)
-
-                if diff[ih: ih + bh, iw: iw + bw, :].any():
-                    block = np.array(
-                        proc_func_(im_.crop((iw, ih, sw_des, sh_des)))
-                            .convert(im_type)
-                    )
+        # bypass diff-based method if do full frame processing is faster
+        if diff_locations:
+            if bw == sl:
+                pre_rbytes = np.array(proc_func_(im_))
+            else:
+                for iw, ih in diff_locations:
+                    #  source image width dim destination,
+                    #  source image height dim destination
+                    sw_des, sh_des = min(iw + bw, sw), min(ih + bh, sh)
+                    block = np.array(proc_func_(im_.crop((iw, ih, sw_des, sh_des))).convert(im_type))
                     pre_rbytes[
-                        int(ih * th / sh): int(sh_des * th / sh),
-                        int(iw * tw / sw): int(sw_des * tw / sw)
+                    int(ih * th / sh): int(sh_des * th / sh),
+                    int(iw * tw / sw): int(sw_des * tw / sw)
                     ] = block
         result = Image.fromarray(pre_rbytes, im_type)
         proc.pre_frame = im_
@@ -106,15 +165,12 @@ def get_block_diff_based_process_func(block_size_,
 
 
 if __name__ == "__main__":
-    import utils.waifu2x as w2x
-    import time
+    import waifu2x as w2x
 
     im = Image.open('small.png')
     # im = Image.open('kazai_original.jpg')
-    proc_func = get_block_diff_based_process_func((400, 400),
-                                                  im.size,
-                                                  tuple(
-                                                      2 * x for x in im.size),
+    proc_func = get_block_diff_based_process_func(im.size,
+                                                  tuple(2 * x for x in im.size),
                                                   im.mode,
                                                   w2x.process_frame)
 
@@ -133,3 +189,6 @@ if __name__ == "__main__":
 
     six.print_("diff based time cost: %fs" % (t2 - t1))
     six.print_("original time cost: %fs" % (t3 - t2))
+
+    for k, v in get_processing_timecosts(w2x.process_frame).items():
+        print(k, '\t', v)
