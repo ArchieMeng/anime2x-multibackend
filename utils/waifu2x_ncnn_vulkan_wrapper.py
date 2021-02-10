@@ -5,7 +5,6 @@
 # the SWIG interface file instead.
 
 from sys import version_info as _swig_python_version_info
-
 if _swig_python_version_info < (2, 7, 0):
     raise RuntimeError("Python 2.7 or later required")
 
@@ -19,7 +18,6 @@ try:
     import builtins as __builtin__
 except ImportError:
     import __builtin__
-
 
 def _swig_repr(self):
     try:
@@ -39,7 +37,6 @@ def _swig_setattr_nondynamic_instance_variable(set):
             set(self, name, value)
         else:
             raise AttributeError("You cannot add instance attributes to %s" % self)
-
     return set_instance_attr
 
 
@@ -49,16 +46,13 @@ def _swig_setattr_nondynamic_class_variable(set):
             set(cls, name, value)
         else:
             raise AttributeError("You cannot add class attributes to %s" % cls)
-
     return set_class_attr
 
 
 def _swig_add_metaclass(metaclass):
     """Class decorator for adding a metaclass to a SWIG wrapped class - a slimmed down version of six.add_metaclass"""
-
     def wrapper(cls):
         return metaclass(cls.__name__, cls.__bases__, cls.__dict__.copy())
-
     return wrapper
 
 
@@ -67,45 +61,12 @@ class _SwigNonDynamicMeta(type):
     __setattr__ = _swig_setattr_nondynamic_class_variable(type.__setattr__)
 
 
-class PixelBuffer(object):
-    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
-    __repr__ = _swig_repr
-
-    def __init__(self, nelements):
-        _waifu2x_ncnn_vulkan_wrapper.PixelBuffer_swiginit(self, _waifu2x_ncnn_vulkan_wrapper.new_PixelBuffer(nelements))
-
-    __swig_destroy__ = _waifu2x_ncnn_vulkan_wrapper.delete_PixelBuffer
-
-    def __getitem__(self, index):
-        return _waifu2x_ncnn_vulkan_wrapper.PixelBuffer___getitem__(self, index)
-
-    def __setitem__(self, index, value):
-        return _waifu2x_ncnn_vulkan_wrapper.PixelBuffer___setitem__(self, index, value)
-
-    def cast(self):
-        return _waifu2x_ncnn_vulkan_wrapper.PixelBuffer_cast(self)
-
-    @staticmethod
-    def frompointer(t):
-        return _waifu2x_ncnn_vulkan_wrapper.PixelBuffer_frompointer(t)
-
-
-# Register PixelBuffer in _waifu2x_ncnn_vulkan_wrapper:
-_waifu2x_ncnn_vulkan_wrapper.PixelBuffer_swigregister(PixelBuffer)
-
-
-def PixelBuffer_frompointer(t):
-    return _waifu2x_ncnn_vulkan_wrapper.PixelBuffer_frompointer(t)
-
-
 class Waifu2x(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
 
     def __init__(self, gpuid, tta_mode=False, num_threads=1):
-        _waifu2x_ncnn_vulkan_wrapper.Waifu2x_swiginit(self, _waifu2x_ncnn_vulkan_wrapper.new_Waifu2x(gpuid, tta_mode,
-                                                                                                     num_threads))
-
+        _waifu2x_ncnn_vulkan_wrapper.Waifu2x_swiginit(self, _waifu2x_ncnn_vulkan_wrapper.new_Waifu2x(gpuid, tta_mode, num_threads))
     __swig_destroy__ = _waifu2x_ncnn_vulkan_wrapper.delete_Waifu2x
 
     def load(self, parampath, modelpath):
@@ -116,18 +77,13 @@ class Waifu2x(object):
 
     def process_cpu(self, inimage, outimage):
         return _waifu2x_ncnn_vulkan_wrapper.Waifu2x_process_cpu(self, inimage, outimage)
-
     noise = property(_waifu2x_ncnn_vulkan_wrapper.Waifu2x_noise_get, _waifu2x_ncnn_vulkan_wrapper.Waifu2x_noise_set)
     scale = property(_waifu2x_ncnn_vulkan_wrapper.Waifu2x_scale_get, _waifu2x_ncnn_vulkan_wrapper.Waifu2x_scale_set)
-    tilesize = property(_waifu2x_ncnn_vulkan_wrapper.Waifu2x_tilesize_get,
-                        _waifu2x_ncnn_vulkan_wrapper.Waifu2x_tilesize_set)
-    prepadding = property(_waifu2x_ncnn_vulkan_wrapper.Waifu2x_prepadding_get,
-                          _waifu2x_ncnn_vulkan_wrapper.Waifu2x_prepadding_set)
-
+    tilesize = property(_waifu2x_ncnn_vulkan_wrapper.Waifu2x_tilesize_get, _waifu2x_ncnn_vulkan_wrapper.Waifu2x_tilesize_set)
+    prepadding = property(_waifu2x_ncnn_vulkan_wrapper.Waifu2x_prepadding_get, _waifu2x_ncnn_vulkan_wrapper.Waifu2x_prepadding_set)
 
 # Register Waifu2x in _waifu2x_ncnn_vulkan_wrapper:
 _waifu2x_ncnn_vulkan_wrapper.Waifu2x_swigregister(Waifu2x)
-
 
 class Image(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
@@ -135,28 +91,21 @@ class Image(object):
     data = property(_waifu2x_ncnn_vulkan_wrapper.Image_data_get, _waifu2x_ncnn_vulkan_wrapper.Image_data_set)
     w = property(_waifu2x_ncnn_vulkan_wrapper.Image_w_get, _waifu2x_ncnn_vulkan_wrapper.Image_w_set)
     h = property(_waifu2x_ncnn_vulkan_wrapper.Image_h_get, _waifu2x_ncnn_vulkan_wrapper.Image_h_set)
-    elempack = property(_waifu2x_ncnn_vulkan_wrapper.Image_elempack_get,
-                        _waifu2x_ncnn_vulkan_wrapper.Image_elempack_set)
+    elempack = property(_waifu2x_ncnn_vulkan_wrapper.Image_elempack_get, _waifu2x_ncnn_vulkan_wrapper.Image_elempack_set)
 
     def __init__(self, d, w, h, channels):
         _waifu2x_ncnn_vulkan_wrapper.Image_swiginit(self, _waifu2x_ncnn_vulkan_wrapper.new_Image(d, w, h, channels))
-
     __swig_destroy__ = _waifu2x_ncnn_vulkan_wrapper.delete_Image
-
 
 # Register Image in _waifu2x_ncnn_vulkan_wrapper:
 _waifu2x_ncnn_vulkan_wrapper.Image_swigregister(Image)
-
 
 class Waifu2xWrapped(Waifu2x):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
 
     def __init__(self, gpuid, tta_mode=False, num_threads=1):
-        _waifu2x_ncnn_vulkan_wrapper.Waifu2xWrapped_swiginit(self,
-                                                             _waifu2x_ncnn_vulkan_wrapper.new_Waifu2xWrapped(gpuid,
-                                                                                                             tta_mode,
-                                                                                                             num_threads))
+        _waifu2x_ncnn_vulkan_wrapper.Waifu2xWrapped_swiginit(self, _waifu2x_ncnn_vulkan_wrapper.new_Waifu2xWrapped(gpuid, tta_mode, num_threads))
 
     def process(self, inimage, outimage):
         return _waifu2x_ncnn_vulkan_wrapper.Waifu2xWrapped_process(self, inimage, outimage)
@@ -166,9 +115,16 @@ class Waifu2xWrapped(Waifu2x):
 
     def get_heap_budget(self):
         return _waifu2x_ncnn_vulkan_wrapper.Waifu2xWrapped_get_heap_budget(self)
-
     __swig_destroy__ = _waifu2x_ncnn_vulkan_wrapper.delete_Waifu2xWrapped
-
 
 # Register Waifu2xWrapped in _waifu2x_ncnn_vulkan_wrapper:
 _waifu2x_ncnn_vulkan_wrapper.Waifu2xWrapped_swigregister(Waifu2xWrapped)
+
+
+def get_gpu_count():
+    return _waifu2x_ncnn_vulkan_wrapper.get_gpu_count()
+
+def destroy_gpu_instance():
+    return _waifu2x_ncnn_vulkan_wrapper.destroy_gpu_instance()
+
+
