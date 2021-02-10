@@ -8,11 +8,15 @@ Based on [waifu2x-chainer](https://github.com/tsurumeso/waifu2x-chainer). (But i
     - (Optional) Cupy (For Nvidia GPU support. For those who installed some strange versions of CUDA runtime,
       cupy-cudaXXX might be the correct module to be installed. note: XXX is the version number of CUDA runtime. etc.
       10.0 -> 100, 7.5 -> 75)
+    - (Optional) [waifu2x-ncnn-vulkan-python](https://github.com/ArchieMeng/waifu2x-ncnn-vulkan-python) compiled shared
+      library. Needed for waifu2x-ncnn-vulkan backend.
     - Pillow
     - pymediainfo
     - ffmpeg-python
-    - (Required on Windows platform) mediainfo.dll (Put it under the program root directory or Windows' Path in
-      environmental varibles)
+    - mediainfo:
+        - For Windows platform, mediainfo.dll (Put it under the program root directory or Windows' Path in environmental
+          varibles)
+        - For other platform, install mediainfo package.
 
 ## Installation
 
