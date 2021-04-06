@@ -5,7 +5,6 @@ if __package__ or '.' in __name__:
     from ..params import ProcessParams
 else:
     from waifu2x_ncnn_vulkan import Waifu2x
-
     ProcessParams = None
 
 

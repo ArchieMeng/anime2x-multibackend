@@ -156,12 +156,10 @@ class Waifu2x:
 
     def get_prepadding(self) -> int:
         if "models-cunet" in self.model:
-            if self._raw_w2xobj.noise == -1:
+            if self._raw_w2xobj.noise == -1 or self._raw_w2xobj.scale == 2:
                 return 18
             elif self._raw_w2xobj.scale == 1:
                 return 28
-            elif self._raw_w2xobj.scale == 2:
-                return 18
         elif (
                 "models-upconv_7_anime_style_art_rgb" in self.model
                 or "models-upconv_7_photo" in self.model
