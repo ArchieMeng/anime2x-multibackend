@@ -1,16 +1,14 @@
 import argparse
-import datetime
-import importlib
 import os
-import time
+import queue
+from math import floor
 
 import ffmpeg
-import numpy as np
 import six
-from PIL import Image
 from pymediainfo import MediaInfo
 
-import utils.utils as ut
+from utils.processors.concurrent import WorkerProcess, FrameReaderThread, FrameWriterThread, Queue
+from utils.processors.params import ProcessParams, FFMPEGParams
 
 # noinspection PyCompatibility
 
@@ -25,140 +23,85 @@ p.add_argument('--crf', default=23,
                help="CRF setting for video encoding")
 p.add_argument('--pix_fmt', default="yuv420p",
                help="pixel format for output video(s)")
-
 p.add_argument('--input', '-i', default='test.mp4')
 p.add_argument('--output', '-o', default='./',
                help="Output dir or output name")
-p.add_argument('--extension', '-e', default='mp4')
+p.add_argument('--extension', '-e', default='mp4',
+               help="The extension name of output videos")
 p.add_argument('--debug', '-D', action='store_true')
-p.add_argument('--mute_ffmpeg', action='store_true')
-p.add_argument('--mute_waifu2x', action='store_true')
 p.add_argument('--diff_based', '-DF',
                action='store_true',
                help="""Enable difference based processing.
                In this mode, anime2x will only process changed frames blocks
                instead of the whole frames""")
 
-# the waifu2x module to use
-p.add_argument("--waifu2x", default="waifu2x_chainer",
-               help="""The waifu2x module to use. 
-               By default, waifu2x-chainer is used""")
+# the backend module to use
+p.add_argument("--backend", default="waifu2x_ncnn_vulkan",
+               help="""The backend module to use. 
+               By default, waifu2x-ncnn-vulkan is used""")
+p.add_argument('--devices', '-d', default=(-1,),
+               nargs="+", type=int, metavar="device_id",
+               help="""The device(s) to use.
+               -N for CPU, etc. -1 for 1 CPU and -8 for 8 CPUs.
+               device_id >= 0 represents the related GPU device. 0 for GPU 0 and 1 for GPU 1.
+               """)
+p.add_argument('--width', '-W', type=int, default=0)
+p.add_argument('--height', '-H', type=int, default=0)
+p.add_argument('--tilesize', '-t', type=int, default=0)
+p.add_argument('--scale', '-s', type=float, default=2.0)
+p.add_argument('--denoise', '-n', type=int, default=-1)
+p.add_argument('--tta_mode', type=bool, default=False)
+p.add_argument('--model', '-m', type=str, default="")
+p.add_argument('--frame_rate', '-f', type=float, default=None)
 
 args, unknown = p.parse_known_args()
-waifu2x = importlib.import_module('.'.join(("utils", args.waifu2x)))
 
 
-def process_video(videoInfo, output_, func, target_size, **kwargs):
+def get_framerate(videoInfo):
+    if 'framerate_num' in videoInfo['Video'] and 'framerate_den' in videoInfo['Video']:
+        return float(videoInfo['Video']['framerate_num']) / float(videoInfo['Video']['framerate_den'])
+    else:
+        return float(videoInfo['Video']['frame_rate'])
+
+
+def process_video(videoInfo, processor_params: list[ProcessParams], params: FFMPEGParams):
     """
-    Process video frames one by one using "func"
-    :param target_size: size of output video file
+    Process video frames one by one using processor params
+    :param processor_params:
+    :param params:
     :param videoInfo: mediainfo dict of input video file
-    :param output_: output path
-    :param func: function to process frames
     :return:
     """
-
-    width, height = videoInfo['Video']['width'], videoInfo['Video']['height']
-    if 'framerate_num' in videoInfo['Video'] and 'framerate_den' in videoInfo['Video']:
-        frame_rate = float(videoInfo['Video']['framerate_num']) / float(videoInfo['Video']['framerate_den'])
-    else:
-        frame_rate = float(videoInfo['Video']['frame_rate'])
-    cnt, total_size = 0, (videoInfo['General']['duration'] * frame_rate / 1000)
     name = videoInfo['General']['complete_name']
     tmpFileName = (str(videoInfo['General']['file_name'])
                    + '_tmp.'
-                   + str(output_.split('.')[-1]))
+                   + str(params.filepath.split('.')[-1]))
 
-    process1 = (
-        ffmpeg
-            .input(name)['v']
-            .output('pipe:',
-                    format='rawvideo',
-                    pix_fmt='rgb24',
-                    r=frame_rate)
-            .run_async(pipe_stdout=True,
-                       pipe_stderr=((not args.debug) or args.mute_ffmpeg))
-    )
+    process_queue = Queue(2 * len(processor_params))
+    process_result_queue = Queue()
+    encoding_queue = queue.Queue()
+    reader = FrameReaderThread(videoInfo, process_queue, process_result_queue, encoding_queue, processor_params[0])
+    encoder = FrameWriterThread(videoInfo, encoding_queue, params)
+    processes = [WorkerProcess(p, process_queue, process_result_queue, daemon=True) for p in processor_params]
 
-    if 'Audio' in videoInfo:
+    reader.start()
+    encoder.start()
+    for process in processes:
+        process.start()
 
-        audioStream = ffmpeg.input(name)['a']
-        videoStream = (
-            ffmpeg
-                .input('pipe:', format='rawvideo', pix_fmt='rgb24',
-                       s='{}x{}'.format(target_size[0],
-                                        target_size[1]))
-        )
+    reader.join()
+    for process in processes:
+        process.join()
 
-        process2 = (
-            ffmpeg
-                .output(videoStream,
-                        audioStream,
-                        tmpFileName,
-                        pix_fmt=args.pix_fmt,
-                        strict='experimental',
-                        r=frame_rate,
-                        **kwargs)
-                .overwrite_output()
-                .run_async(pipe_stdin=True,
-                           quiet=((not args.debug) or args.mute_ffmpeg))
-        )
-    else:
-        process2 = (
-            ffmpeg
-                .input('pipe:', format='rawvideo', pix_fmt='rgb24',
-                       s='{}x{}'.format(target_size[0], target_size[1]))
-                .output(tmpFileName, pix_fmt=args.pix_fmt,
-                        r=frame_rate, **kwargs)
-                .overwrite_output()
-                .run_async(pipe_stdin=True,
-                           quiet=((not args.debug) or args.mute_ffmpeg))
-        )
-
-    ut.print_progress_bar(0, total_size, name, "time left: N/A", length=30)
-
-    start = time.time()
-    while True:
-        in_bytes = process1.stdout.read(width * height * 3)
-        if not in_bytes:
-            break
-
-        img = Image.frombytes('RGB',
-                              (width, height),
-                              in_bytes,)
-
-        img = func(img)
-        img = np.array(img).tobytes()
-
-        process2.stdin.write(img)
-        # # ignore process2 output
-        # with open('ffmpeg.out', 'a') as fp:
-        #     fp.write(process2.stdout.readl(process2.stdout.peek(1)))
-        #     fp.write(process2.stderr.readl(process2.stderr.peek(1)))
-
-        cnt += 1
-        time_cost = round((time.time() - start) / cnt, 1)
-        time_left = str(datetime.timedelta(0, time_cost * (total_size - cnt)))
-        ut.print_progress_bar(cnt,
-                              total_size,
-                              name,
-                              "time left: {}".format(time_left),
-                              decimals=3,
-                              length=30)
-
-    process2.stdin.close()
-    process1.wait()
-    process2.wait()
-    six.print_()
-    six.print_("processing time: " + str(datetime.timedelta(0, time.time() - start)))
+    encoder.join()
 
     tmpFileInfo = {track.track_type: track.to_data()
                    for track in MediaInfo.parse(tmpFileName).tracks}
-    if tmpFileInfo['Video']['frame_count'] != videoInfo['Video']['frame_count']:
+    if 'Video' in tmpFileInfo and tmpFileInfo['Video']['frame_count'] != videoInfo['Video']['frame_count']:
         six.print_("syncing video stream and audio stream")
         tmpFramesCount, correctFrameCount = (
-        tmpFileInfo['Video']['frame_count'],
-        videoInfo['Video']['frame_count'])
+            tmpFileInfo['Video']['frame_count'],
+            videoInfo['Video']['frame_count'])
 
         audioStream = ffmpeg.input(name)['a']
         videoStream = (
@@ -170,20 +113,17 @@ def process_video(videoInfo, output_, func, target_size, **kwargs):
         (ffmpeg
          .output(videoStream,
                  audioStream,
-                 output_,
+                 params.filepath,
                  pix_fmt=args.pix_fmt,
                  strict='experimental',
                  r=videoInfo['Video']['frame_rate'],
-                 **kwargs)
+                 **params.additional_params)
          .overwrite_output()
-         .run(quiet=((not args.debug) or args.mute_ffmpeg)))
+         .run(quiet=(not params.debug)))
         os.remove(tmpFileName)
     else:
-        os.rename(tmpFileName, output_)
+        os.rename(tmpFileName, params.filepath)
 
-
-# mute waifu2x output
-waifu2x.DEBUG = args.debug & (not args.mute_waifu2x)
 
 if __name__ == "__main__":
 
@@ -215,27 +155,36 @@ if __name__ == "__main__":
         width, height = videoInfo['Video']['width'], \
                         videoInfo['Video']['height']
 
-        # test waifu2x backend, and get the size of target video as well as time cost of a full frame process
-        cost = time.time()
-        im = waifu2x.process_frame(Image.new("RGB", (width, height)),
-                                   dry_run=True)
-        cost = time.time() - cost
-        process_frame = waifu2x.process_frame
+        if args.width != 0:
+            args.scale = args.width / width
+        if args.height != 0:
+            args.scale = args.height / height
 
-        # apply diff based process frame function
-        # (only process different block)
-        if args.diff_based:
-            from math import gcd
+        output_width = floor(width * args.scale)
+        output_height = floor(height * args.scale)
 
-            ut.sl, ut.ss = max(width, height), min(width, height)
-            ut.proc_costs = ut.get_processing_timecosts(process_frame)
-            ut.proc_costs[ut.sl] = cost
-            process_frame = ut.get_block_diff_based_process_func(
-                (width, height),
-                im.size,
-                im.mode,
-                process_frame
-            )
+        process_params = []
+        for device_id in args.devices:
+            n_threads = abs(device_id) if device_id < 0 else 1
+            device_id = max(device_id, -1)
+
+            process_params.append(ProcessParams(
+                device_id=device_id,
+                backend=args.backend,
+                input_width=width,
+                input_height=height,
+                input_pix_fmt='RGB',
+                original_frame_rate=get_framerate(videoInfo),
+                frame_rate=args.frame_rate or get_framerate(videoInfo),
+                debug=args.debug,
+                model=args.model,
+                scale=args.scale,
+                denoise_level=args.denoise,
+                tta_mode=args.tta_mode,
+                tilesize=args.tilesize,
+                n_threads=n_threads,
+                diff_based=args.diff_based,
+            ))
 
         if output_name:
             output_path = os.path.join(output_dir, output_name)
@@ -252,13 +201,18 @@ if __name__ == "__main__":
         if os.path.exists(output_path) and output_name == "":
             output_path = os.path.join(output_dir, ''.join(
                 [str(videoInfo['General']['file_name']),
-                 "[{}X{}]".format(im.size[0], im.size[1]), '.',
+                 "[{}X{}]".format(output_width, output_height), '.',
                  args.extension]))
 
         process_video(videoInfo,
-                      output_path,
-                      process_frame,
-                      im.size,
-                      vcodec=args.vcodec,
-                      acodec=args.acodec,
-                      crf=args.crf)
+                      process_params,
+                      FFMPEGParams(
+                          width=output_width,
+                          height=output_height,
+                          filepath=output_path,
+                          vcodec=args.vcodec,
+                          acodec=args.acodec,
+                          crf=args.crf,
+                          debug=args.debug,
+                          frame_rate=args.frame_rate or get_framerate(videoInfo),
+                          pix_fmt=args.pix_fmt))
