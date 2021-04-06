@@ -10,7 +10,6 @@ import ffmpeg
 import numpy as np
 import six
 from PIL import Image
-from cython import nogil
 
 from .params import ProcessParams, FFMPEGParams
 from ..utils import print_progress_bar
@@ -223,9 +222,7 @@ class WorkerProcess(ctx.Process):
                 if self.params.debug:
                     six.print_(f"{self.name}: processing {task_id}")
 
-                with nogil:
-                    im = self.processor.process(im)
-
+                im = self.processor.process(im)
                 if self.params.debug:
                     six.print_(f"{self.name}: {task_id} done")
 
