@@ -1,6 +1,8 @@
-import os
+import sys
+from math import floor
 from pathlib import Path
 
+from Cython import nogil
 from PIL import Image
 
 if __package__:
@@ -18,7 +20,7 @@ class Waifu2x:
             model="models-cunet",
             tta_mode=False,
             num_threads=1,
-            scale=2,
+            scale: float = 2,
             noise=0,
             tilesize=0,
     ):
@@ -29,17 +31,18 @@ class Waifu2x:
         :param model: the name or the path to the model
         :param tta_mode: whether to enable tta mode or not
         :param num_threads: the number of threads in upscaling
-        :param scale: scale ratio. value: 1/2. default: 2
-        :param noise: noise level. value: -1/0/1/2/3. default: -1
+        :param scale: scale level, 1 = no scaling, 2 = upscale 2x. value: float. default: 2
+        :param noise: noise level, large value means strong denoise effect, -1 = no effect. value: -1/0/1/2/3. default: 0
         :param tilesize: tile size. 0 for automatically setting the size. default: 0
         """
         self._raw_w2xobj = raw.Waifu2xWrapped(gpuid, tta_mode, num_threads)
         self.model = model
         self.gpuid = gpuid
+        self.scale = scale  # the real scale ratio
         self.set_params(scale, noise, tilesize)
         self.load()
 
-    def set_params(self, scale=2, noise=-1, tilesize=0):
+    def set_params(self, scale=2., noise=-1, tilesize=0):
         """
         set parameters for waifu2x object
 
@@ -48,12 +51,11 @@ class Waifu2x:
         :param tilesize: default: 0
         :return: None
         """
-        self._raw_w2xobj.scale = scale
+        self._raw_w2xobj.scale = (
+            2 if scale > 1 else 1
+        )  # control the real scale ratio at each raw process call
         self._raw_w2xobj.noise = noise
-        if tilesize == 0:
-            self._raw_w2xobj.tilesize = self.get_tilesize()
-        else:
-            self._raw_w2xobj.tilesize = tilesize
+        self._raw_w2xobj.tilesize = self.get_tilesize() if tilesize == 0 else tilesize
         self._raw_w2xobj.prepadding = self.get_prepadding()
 
     def load(self, parampath: str = "", modelpath: str = "") -> None:
@@ -66,12 +68,10 @@ class Waifu2x:
         """
         if not parampath or not modelpath:
             model_dir = Path(self.model)
-            if not model_dir.is_absolute():
-                if (
-                        not model_dir.is_dir()
-                ):  # try to load it from module path if not exists as directory
-                    dir_path = Path(__file__).parent
-                    model_dir = dir_path.joinpath("models", self.model)
+            if not model_dir.is_absolute() and (
+                    not model_dir.is_dir()):  # try to load it from module path if not exists as directory
+                dir_path = Path(__file__).parent
+                model_dir = dir_path.joinpath("models", self.model)
 
             if self._raw_w2xobj.noise == -1:
                 parampath = model_dir.joinpath("scale2.0x_model.param")
@@ -92,12 +92,36 @@ class Waifu2x:
                     f"noise{self._raw_w2xobj.noise}_scale2.0x_model.bin"
                 )
 
-        if Path(parampath).exists() and Path(modelpath).exists():
-            self._raw_w2xobj.load(str(parampath), str(modelpath))
-        else:
+        if not Path(parampath).exists() or not Path(modelpath).exists():
             raise FileNotFoundError(f"{parampath} or {modelpath} not found")
+        parampath_str, modelpath_str = raw.StringType(), raw.StringType()
+        if sys.platform in ("win32", "cygwin"):
+            parampath_str.wstr = raw.new_wstr_p()
+            raw.wstr_p_assign(parampath_str.wstr, str(parampath))
+            modelpath_str.wstr = raw.new_wstr_p()
+            raw.wstr_p_assign(modelpath_str.wstr, str(modelpath))
+        else:
+            parampath_str.str = raw.new_str_p()
+            raw.str_p_assign(parampath_str.str, str(parampath))
+            modelpath_str.str = raw.new_str_p()
+            raw.str_p_assign(modelpath_str.str, str(modelpath))
+
+        self._raw_w2xobj.load(parampath_str, modelpath_str)
 
     def process(self, im: Image) -> Image:
+        if self.scale > 1:
+            cur_scale = 1
+            w, h = im.size
+            while cur_scale < self.scale:
+                im = self._process(im)
+                cur_scale *= 2
+            w, h = floor(w * self.scale), floor(h * self.scale)
+            im = im.resize((w, h))
+        else:
+            im = self._process(im)
+        return im
+
+    def _process(self, im: Image) -> Image:
         """
         Process the incoming PIL.Image
 
@@ -114,13 +138,15 @@ class Waifu2x:
             self._raw_w2xobj.scale * im.width,
             self._raw_w2xobj.scale * im.height,
             channels,
-            )
+        )
 
         if self.gpuid != -1:
-            self._raw_w2xobj.process(raw_in_image, raw_out_image)
+            with nogil:
+                self._raw_w2xobj.process(raw_in_image, raw_out_image)
         else:
             self._raw_w2xobj.tilesize = max(im.width, im.height)
-            self._raw_w2xobj.process_cpu(raw_in_image, raw_out_image)
+            with nogil:
+                self._raw_w2xobj.process_cpu(raw_in_image, raw_out_image)
 
         return Image.frombytes(
             im.mode,
@@ -136,9 +162,10 @@ class Waifu2x:
                 return 28
             elif self._raw_w2xobj.scale == 2:
                 return 18
-        elif "models-upconv_7_anime_style_art_rgb" in self.model:
-            return 7
-        elif "models-upconv_7_photo" in self.model:
+        elif (
+                "models-upconv_7_anime_style_art_rgb" in self.model
+                or "models-upconv_7_photo" in self.model
+        ):
             return 7
         else:
             raise ValueError(f'model "{self.model}" is not supported')
@@ -146,33 +173,33 @@ class Waifu2x:
     def get_tilesize(self):
         if self.gpuid == -1:
             return 4000
-        else:
-            heap_budget = self._raw_w2xobj.get_heap_budget()
-            if "models-cunet" in self.model:
-                if heap_budget > 2600:
-                    return 400
-                elif heap_budget > 740:
-                    return 200
-                elif heap_budget > 250:
-                    return 100
-                else:
-                    return 32
+
+        heap_budget = self._raw_w2xobj.get_heap_budget()
+        if "models-cunet" in self.model:
+            if heap_budget > 2600:
+                return 400
+            elif heap_budget > 740:
+                return 200
+            elif heap_budget > 250:
+                return 100
             else:
-                if heap_budget > 1900:
-                    return 400
-                elif heap_budget > 550:
-                    return 200
-                elif heap_budget > 190:
-                    return 100
-                else:
-                    return 32
+                return 32
+        else:
+            if heap_budget > 1900:
+                return 400
+            elif heap_budget > 550:
+                return 200
+            elif heap_budget > 190:
+                return 100
+            else:
+                return 32
 
 
 if __name__ == "__main__":
     from time import time
 
     t = time()
-    im = Image.open("../../images/0.jpg")
+    im = Image.open("../images/0.jpg")
     w2x_obj = Waifu2x(0, noise=0, scale=2)
     out_im = w2x_obj.process(im)
     out_im.save("temp.png")
