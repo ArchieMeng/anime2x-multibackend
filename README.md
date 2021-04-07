@@ -31,7 +31,7 @@ It has several advantages:
 
 ## Supported Backends
 
-- [ ] waifu2x-chainer (Converting now)
+- [x] waifu2x-chainer
 - [x] waifu2x-ncnn-vulkan
 - [ ] rife-ncnn-vulkan (Will come out soon)
 - [ ] srmd-ncnn-vulkan (Waiting for subproject srmd-ncnn-vulkan to start)
@@ -123,7 +123,7 @@ This is just an simple example of how Processor looks like.
 """
 from PIL import Image
 
-from ..params import ProcessParams
+from utils.processors.params import ProcessParams
 
 
 class Processor:

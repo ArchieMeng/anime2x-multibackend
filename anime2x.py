@@ -1,6 +1,7 @@
 import argparse
 import os
 import queue
+import re
 from math import floor
 
 import ffmpeg
@@ -9,8 +10,6 @@ from pymediainfo import MediaInfo
 
 from utils.processors.concurrent import WorkerProcess, FrameReaderThread, FrameWriterThread, Queue
 from utils.processors.params import ProcessParams, FFMPEGParams
-
-# noinspection PyCompatibility
 
 programDir = os.path.dirname(__file__)
 
@@ -36,7 +35,7 @@ p.add_argument('--diff_based', '-DF',
                instead of the whole frames""")
 
 # the backend module to use
-p.add_argument("--backend", default="waifu2x_ncnn_vulkan",
+p.add_argument("--backend", '-b', default="waifu2x_ncnn_vulkan",
                help="""The backend module to use. 
                By default, waifu2x-ncnn-vulkan is used""")
 p.add_argument('--devices', '-d', default=(-1,),
@@ -170,7 +169,7 @@ if __name__ == "__main__":
 
             process_params.append(ProcessParams(
                 device_id=device_id,
-                backend=args.backend,
+                backend=re.sub(r'-', '_', args.backend),
                 input_width=width,
                 input_height=height,
                 input_pix_fmt='RGB',

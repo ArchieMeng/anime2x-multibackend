@@ -2,7 +2,6 @@ import sys
 from math import floor
 from pathlib import Path
 
-from Cython import nogil
 from PIL import Image
 
 if __package__:
@@ -141,12 +140,10 @@ class Waifu2x:
         )
 
         if self.gpuid != -1:
-            with nogil:
-                self._raw_w2xobj.process(raw_in_image, raw_out_image)
+            self._raw_w2xobj.process(raw_in_image, raw_out_image)
         else:
             self._raw_w2xobj.tilesize = max(im.width, im.height)
-            with nogil:
-                self._raw_w2xobj.process_cpu(raw_in_image, raw_out_image)
+            self._raw_w2xobj.process_cpu(raw_in_image, raw_out_image)
 
         return Image.frombytes(
             im.mode,

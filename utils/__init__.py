@@ -1,1 +1,1 @@
-__all__ = ['utils', 'waifu2x_chainer']
+__all__ = ['utils']
