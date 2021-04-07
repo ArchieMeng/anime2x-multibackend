@@ -63,65 +63,62 @@ def get_framerate(videoInfo):
         return float(videoInfo['Video']['frame_rate'])
 
 
-def process_video(videoInfo, processor_params: list[ProcessParams], params: FFMPEGParams):
+def sync_tmpfile_av(tmp_file_name, video_info, params: FFMPEGParams):
+    tmp_file_info = {track.track_type: track.to_data()
+                     for track in MediaInfo.parse(tmp_file_name).tracks}
+    if 'Video' in tmp_file_info and tmp_file_info['Video']['frame_count'] != video_info['Video']['frame_count']:
+        six.print_("syncing video stream and audio stream")
+        audio_stream = ffmpeg.input(video_info['General']['complete_name'])['a']
+        video_stream = (
+            ffmpeg
+                .input(tmp_file_name)
+                .setpts("{}/{}*PTS".format(video_info['Video']['frame_count'], tmp_file_info['Video']['frame_count']))
+        )
+
+        (
+            ffmpeg
+                .output(video_stream,
+                        audio_stream,
+                        params.filepath,
+                        pix_fmt=args.pix_fmt,
+                        strict='experimental',
+                        r=video_info['Video']['frame_rate'],
+                        **params.additional_params)
+                .overwrite_output()
+                .run(quiet=(not params.debug))
+        )
+        os.remove(tmp_file_name)
+    else:
+        os.rename(tmp_file_name, params.filepath)
+
+
+def process_video(video_info, processor_params: list[ProcessParams], params: FFMPEGParams):
     """
     Process video frames one by one using processor params
-    :param processor_params:
-    :param params:
-    :param videoInfo: mediainfo dict of input video file
-    :return:
+    :param processor_params: the list of ProcessParams for each individual processors
+    :param params: the ffmpeg params for encoding
+    :param video_info: mediainfo dict of input video file
+    :return: None
     """
-    name = videoInfo['General']['complete_name']
-    tmpFileName = (str(videoInfo['General']['file_name'])
-                   + '_tmp.'
-                   + str(params.filepath.split('.')[-1]))
-
+    tmp_file_name = f"{video_info['General']['file_name']}_tmp.{params.filepath.split('.')[-1]}"
     process_queue = Queue(2 * len(processor_params))
     process_result_queue = Queue()
     encoding_queue = queue.Queue()
-    reader = FrameReaderThread(videoInfo, process_queue, process_result_queue, encoding_queue, processor_params[0])
-    encoder = FrameWriterThread(videoInfo, encoding_queue, params)
+    reader = FrameReaderThread(video_info, process_queue, process_result_queue, encoding_queue, processor_params[0])
+    encoder = FrameWriterThread(video_info, encoding_queue, params)
     processes = [WorkerProcess(p, process_queue, process_result_queue, daemon=True) for p in processor_params]
 
     reader.start()
-    encoder.start()
     for process in processes:
         process.start()
+    encoder.start()
 
     reader.join()
     for process in processes:
         process.join()
-
     encoder.join()
 
-    tmpFileInfo = {track.track_type: track.to_data()
-                   for track in MediaInfo.parse(tmpFileName).tracks}
-    if 'Video' in tmpFileInfo and tmpFileInfo['Video']['frame_count'] != videoInfo['Video']['frame_count']:
-        six.print_("syncing video stream and audio stream")
-        tmpFramesCount, correctFrameCount = (
-            tmpFileInfo['Video']['frame_count'],
-            videoInfo['Video']['frame_count'])
-
-        audioStream = ffmpeg.input(name)['a']
-        videoStream = (
-            ffmpeg
-                .input(tmpFileName)
-                .setpts("{}/{}*PTS".format(correctFrameCount, tmpFramesCount))
-        )
-
-        (ffmpeg
-         .output(videoStream,
-                 audioStream,
-                 params.filepath,
-                 pix_fmt=args.pix_fmt,
-                 strict='experimental',
-                 r=videoInfo['Video']['frame_rate'],
-                 **params.additional_params)
-         .overwrite_output()
-         .run(quiet=(not params.debug)))
-        os.remove(tmpFileName)
-    else:
-        os.rename(tmpFileName, params.filepath)
+    sync_tmpfile_av(tmp_file_name, video_info, params)
 
 
 if __name__ == "__main__":
@@ -146,13 +143,13 @@ if __name__ == "__main__":
         if os.path.isdir(file):  # bypass directory
             continue
 
-        videoInfo = {track.track_type: track.to_data()
-                     for track in MediaInfo.parse(file).tracks}
-        if 'Video' not in videoInfo:  # bypass non-video files
+        video_info = {track.track_type: track.to_data()
+                      for track in MediaInfo.parse(file).tracks}
+        if 'Video' not in video_info:  # bypass non-video files
             continue
 
-        width, height = videoInfo['Video']['width'], \
-                        videoInfo['Video']['height']
+        width, height = video_info['Video']['width'], \
+                        video_info['Video']['height']
 
         if args.width != 0:
             args.scale = args.width / width
@@ -173,8 +170,8 @@ if __name__ == "__main__":
                 input_width=width,
                 input_height=height,
                 input_pix_fmt='RGB',
-                original_frame_rate=get_framerate(videoInfo),
-                frame_rate=args.frame_rate or get_framerate(videoInfo),
+                original_frame_rate=get_framerate(video_info),
+                frame_rate=args.frame_rate or get_framerate(video_info),
                 debug=args.debug,
                 model=args.model,
                 scale=args.scale,
@@ -190,7 +187,7 @@ if __name__ == "__main__":
         else:
             output_path = os.path.join(output_dir,
                                        ''.join(
-                                           [str(videoInfo['General'][
+                                           [str(video_info['General'][
                                                     'file_name']),
                                             '.',
                                             args.extension])
@@ -199,11 +196,11 @@ if __name__ == "__main__":
         # when output dir is specific and output files exist
         if os.path.exists(output_path) and output_name == "":
             output_path = os.path.join(output_dir, ''.join(
-                [str(videoInfo['General']['file_name']),
+                [str(video_info['General']['file_name']),
                  "[{}X{}]".format(output_width, output_height), '.',
                  args.extension]))
 
-        process_video(videoInfo,
+        process_video(video_info,
                       process_params,
                       FFMPEGParams(
                           width=output_width,
@@ -213,5 +210,5 @@ if __name__ == "__main__":
                           acodec=args.acodec,
                           crf=args.crf,
                           debug=args.debug,
-                          frame_rate=args.frame_rate or get_framerate(videoInfo),
+                          frame_rate=args.frame_rate or get_framerate(video_info),
                           pix_fmt=args.pix_fmt))
