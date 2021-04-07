@@ -66,7 +66,11 @@ def get_framerate(videoInfo):
 def sync_tmpfile_av(tmp_file_name, video_info, params: FFMPEGParams):
     tmp_file_info = {track.track_type: track.to_data()
                      for track in MediaInfo.parse(tmp_file_name).tracks}
-    if 'Video' in tmp_file_info and tmp_file_info['Video']['frame_count'] != video_info['Video']['frame_count']:
+
+    frame_not_equal = 'Video' in tmp_file_info and tmp_file_info['Video']['frame_count'] != video_info['Video'][
+        'frame_count']
+
+    if frame_not_equal:
         six.print_("syncing video stream and audio stream")
         audio_stream = ffmpeg.input(video_info['General']['complete_name'])['a']
         video_stream = (
@@ -82,8 +86,7 @@ def sync_tmpfile_av(tmp_file_name, video_info, params: FFMPEGParams):
                         params.filepath,
                         pix_fmt=args.pix_fmt,
                         strict='experimental',
-                        r=video_info['Video']['frame_rate'],
-                        **params.additional_params)
+                        r=video_info['Video']['frame_rate'], )
                 .overwrite_output()
                 .run(quiet=(not params.debug))
         )
@@ -95,9 +98,9 @@ def sync_tmpfile_av(tmp_file_name, video_info, params: FFMPEGParams):
 def process_video(video_info, processor_params: list[ProcessParams], params: FFMPEGParams):
     """
     Process video frames one by one using processor params
+    :param video_info: mediainfo dict of input video file
     :param processor_params: the list of ProcessParams for each individual processors
     :param params: the ffmpeg params for encoding
-    :param video_info: mediainfo dict of input video file
     :return: None
     """
     tmp_file_name = f"{video_info['General']['file_name']}_tmp.{params.filepath.split('.')[-1]}"
@@ -180,6 +183,7 @@ if __name__ == "__main__":
                 tilesize=args.tilesize,
                 n_threads=n_threads,
                 diff_based=args.diff_based,
+                additional_args=unknown,
             ))
 
         if output_name:

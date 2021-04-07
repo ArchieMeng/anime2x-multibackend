@@ -1,3 +1,4 @@
+import argparse
 import importlib.util
 import os
 import sys
@@ -31,14 +32,12 @@ utils = import_waifu2x_module("utils")
 default_model = "UpResNet10"
 
 
-def debug_print(*args, **kwargs):
-    if "params" in kwargs:
-        debug = kwargs.pop("params").debug
-        if debug:
-            six.print_(file=sys.stderr, *args, **kwargs)
+def debug_print(debug=False, *args, **kwargs):
+    if debug:
+        six.print_(file=sys.stderr, *args, **kwargs)
 
 
-def load_models(cfg: ProcessParams):
+def load_models(cfg: ProcessParams, args: argparse.Namespace):
     ch = 3 if cfg.input_pix_fmt.lower() == 'rgb' else 1
     if cfg.model:
         if os.path.isdir(cfg.model):
@@ -51,7 +50,7 @@ def load_models(cfg: ProcessParams):
 
     models = {}
     flag = False
-    if cfg.additional_params['method'] == 'noise_scale':
+    if args.method == 'noise_scale':
         model_name = 'anime_style_noise{}_scale_{}.npz'.format(
             cfg.denoise_level, cfg.input_pix_fmt.lower())
         model_path = os.path.join(model_dir, model_name)
@@ -64,12 +63,12 @@ def load_models(cfg: ProcessParams):
             chainer.serializers.load_npz(alpha_model_path, models['alpha'])
         else:
             flag = True
-    if cfg.additional_params['method'] == 'scale' or flag:
+    if args.method == 'scale' or flag:
         model_name = 'anime_style_scale_{}.npz'.format(cfg.input_pix_fmt.lower())
         model_path = os.path.join(model_dir, model_name)
         models['scale'] = srcnn.archs[cfg.model](ch)
         chainer.serializers.load_npz(model_path, models['scale'])
-    if cfg.additional_params['method'] == 'noise' or flag:
+    if args.method == 'noise' or flag:
         model_name = 'anime_style_noise{}_{}.npz'.format(
             cfg.denoise_level, cfg.input_pix_fmt.lower())
         model_path = os.path.join(model_dir, model_name)
@@ -88,7 +87,7 @@ def load_models(cfg: ProcessParams):
     return models
 
 
-def split_alpha(src, model, **kwargs):
+def split_alpha(src, model, debug=False):
     alpha = None
     if src.mode in ('L', 'RGB', 'P') and isinstance(
             src.info.get('transparency'), bytes
@@ -96,36 +95,36 @@ def split_alpha(src, model, **kwargs):
         src = src.convert('RGBA')
     rgb = src.convert('RGB')
     if src.mode in ('LA', 'RGBA'):
-        debug_print('Splitting alpha channel...', end=' ', flush=True, **kwargs)
+        debug_print(debug, 'Splitting alpha channel...', end=' ', flush=True)
         alpha = src.split()[-1]
         rgb = iproc.alpha_make_border(rgb, alpha, model)
-        debug_print('OK', **kwargs)
+        debug_print(debug, 'OK', debug=debug)
     return rgb, alpha
 
 
-def denoise_image(cfg: ProcessParams, src, model, **kwargs):
-    dst, alpha = split_alpha(src, model, **kwargs)
-    debug_print('Level {} denoising...'.format(cfg.denoise_level),
-                end=' ', flush=True, **kwargs)
+def denoise_image(cfg: ProcessParams, args: argparse.Namespace, src, model):
+    dst, alpha = split_alpha(src, model, cfg.debug)
+    debug_print(cfg.debug, 'Level {} denoising...'.format(cfg.denoise_level),
+                end=' ', flush=True)
     if cfg.tta_mode:
         dst = reconstruct.image_tta(
-            dst, model, cfg.additional_params.get("tta_level", 8), cfg.tilesize,
-            cfg.additional_params.get("batch_size", 16))
+            dst, model, args.tta_level, cfg.tilesize,
+            args.batch_size)
     else:
-        dst = reconstruct.image(dst, model, cfg.tilesize, cfg.additional_params.get("batch_size", 16))
+        dst = reconstruct.image(dst, model, cfg.tilesize, args.batch_size)
     if model.inner_scale != 1:
         dst = dst.resize((src.size[0], src.size[1]), Image.LANCZOS)
-    debug_print('OK', **kwargs)
+    debug_print(cfg.debug, 'OK')
     if alpha is not None:
         dst.putalpha(alpha)
     return dst
 
 
-def upscale_image(cfg: ProcessParams, src, scale_model, alpha_model=None, **kwargs):
-    dst, alpha = split_alpha(src, scale_model, **kwargs)
+def upscale_image(cfg: ProcessParams, args: argparse.Namespace, src, scale_model, alpha_model=None):
+    dst, alpha = split_alpha(src, scale_model, cfg.debug)
     log_scale = np.log2(cfg.scale)
     for i in range(int(np.ceil(log_scale))):
-        debug_print('2.0x upscaling...', end=' ', flush=True, **kwargs)
+        debug_print(cfg.debug, '2.0x upscaling...', end=' ', flush=True, )
         model = alpha_model
         if i == 0 or alpha_model is None:
             model = scale_model
@@ -133,24 +132,22 @@ def upscale_image(cfg: ProcessParams, src, scale_model, alpha_model=None, **kwar
             dst = iproc.nn_scaling(dst, 2)  # Nearest neighbor 2x scaling
             alpha = iproc.nn_scaling(alpha, 2)  # Nearest neighbor 2x scaling
         if cfg.tta_mode:
-            dst = reconstruct.image_tta(
-                dst, model, cfg.additional_params.get("tta_level", 8), cfg.tilesize,
-                cfg.additional_params.get("batch_size", 16))
+            dst = reconstruct.image_tta(dst, model, args.tta_level, cfg.tilesize, args.batch_size)
         else:
-            dst = reconstruct.image(dst, model, cfg.tilesize, cfg.additional_params.get("batch_size", 16))
+            dst = reconstruct.image(dst, model, cfg.tilesize, args.batch_size)
         if alpha_model is None:
             alpha = reconstruct.image(
-                alpha, scale_model, cfg.tilesize, cfg.additional_params.get("batch_size", 16))
+                alpha, scale_model, cfg.tilesize, args.batch_size)
         else:
             alpha = reconstruct.image(
-                alpha, alpha_model, cfg.tilesize, cfg.additional_params.get("batch_size", 16))
-        debug_print('OK', **kwargs)
+                alpha, alpha_model, cfg.tilesize, args.batch_size)
+        debug_print(cfg.debug, 'OK')
     dst_w = int(np.round(src.size[0] * cfg.scale))
     dst_h = int(np.round(src.size[1] * cfg.scale))
     if np.round(log_scale % 1.0, 6) != 0 or log_scale <= 0:
-        debug_print('Resizing...', end=' ', flush=True, **kwargs)
+        debug_print(cfg.debug, 'Resizing...', end=' ', flush=True)
         dst = dst.resize((dst_w, dst_h), Image.LANCZOS)
-        debug_print('OK', **kwargs)
+        debug_print(cfg.debug, 'OK')
     if alpha is not None:
         if alpha.size[0] != dst_w or alpha.size[1] != dst_h:
             alpha = alpha.resize((dst_w, dst_h), Image.LANCZOS)
@@ -158,25 +155,32 @@ def upscale_image(cfg: ProcessParams, src, scale_model, alpha_model=None, **kwar
     return dst
 
 
+def get_parser():
+    p = argparse.ArgumentParser()
+    p.add_argument('--tta_level', '-T', type=int, default=8,
+                   choices=[2, 4, 8])
+    p.add_argument('--method', '-m', default='scale',
+                   choices=['noise', 'scale', 'noise_scale'])
+    p.add_argument('--batch_size', '-b', type=int, default=16)
+    return p
+
+
 class Processor(BaseProcessor):
     def __init__(self, params: ProcessParams):
+        p = get_parser()
+        self.args = p.parse_args(params.additional_args)
+
         if params.model and params.model in srcnn.table:
             params.model = srcnn.table[params.model]
-        if params.denoise_level >= 0 and params.scale > 1:
-            params.additional_params['method'] = "noise_scale"
-        elif params.scale > 1:
-            params.additional_params['method'] = "scale"
-        else:
-            params.additional_params['method'] = "noise"
-        self.models = load_models(params)
+        self.models = load_models(params, self.args)
         self.params = params
         if params.tilesize < 32:
             params.tilesize = 128
 
     def process(self, im: Image) -> Image:
         if 'noise_scale' in self.models:
-            return upscale_image(self.params, im, self.models['noise_scale'], self.models['alpha'], params=self.params)
+            return upscale_image(self.params, self.args, im, self.models['noise_scale'], self.models['alpha'])
         if 'noise' in self.models:
-            return denoise_image(self.params, im, self.models['noise'], params=self.params)
+            return denoise_image(self.params, self.args, im, self.models['noise'])
         if 'scale' in self.models:
-            return upscale_image(self.params, im, self.models['scale'], params=self.params)
+            return upscale_image(self.params, self.args, im, self.models['scale'])

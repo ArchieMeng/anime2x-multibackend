@@ -16,7 +16,7 @@ class ProcessParams:
     denoise_level: int
     debug: bool
     tilesize: int
-    additional_params: dict = field(default_factory=dict)
+    additional_args: list = field(default_factory=list)
     n_threads: int = 1
     diff_based: bool = False
     tta_mode: bool = False
@@ -39,4 +39,8 @@ class FFMPEGParams:
     acodec: str
     crf: int
     debug: bool
+    additional_args: list = field(default_factory=list)
     additional_params: dict = field(default_factory=dict)
+
+    def to_json(self):
+        return json.dumps(asdict(self))
