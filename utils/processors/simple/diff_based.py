@@ -92,8 +92,6 @@ class DiffBasedProcessor(BaseProcessor):
                                             np.array(self.last_result))
         diff = im_bytes - pre_fbytes  # difference array calculated directly be minus them
         sw, sh = self.params.input_width, self.params.input_height  # source size (width, height)
-        tw, th = (int(self.params.input_width * self.params.scale),
-                  int(self.params.input_height * self.params.scale))  # target frame size (width, height)
         bs, diff_locations = self.choose_best_diff_block_size(diff)
         bw = bh = bs
         sl = max(self.params.input_width, self.params.input_height)
@@ -104,16 +102,15 @@ class DiffBasedProcessor(BaseProcessor):
                 pre_rbytes = np.array(self.postprocessor.process(im))
             else:
                 for iw, ih in diff_locations:
-                    #  source image width dim destination,
-                    #  source image height dim destination
+                    #  source image width dim destination, source image height dim destination
                     sw_des, sh_des = min(iw + bw, sw), min(ih + bh, sh)
                     block = np.array(
                         self.postprocessor
                             .process(im.crop((iw, ih, sw_des, sh_des)))
                             .convert(self.params.input_pix_fmt))
                     pre_rbytes[
-                    int(ih * th / sh): int(sh_des * th / sh),
-                    int(iw * tw / sw): int(sw_des * tw / sw)
+                    int(ih * self.params.scale): int(sh_des * self.params.scale),
+                    int(iw * self.params.scale): int(sw_des * self.params.scale)
                     ] = block
         result = Image.fromarray(pre_rbytes, self.params.input_pix_fmt)
         self.last_frame = im
