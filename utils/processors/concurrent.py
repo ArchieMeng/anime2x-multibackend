@@ -187,7 +187,7 @@ class FrameWriterThread(Thread):
             del b
 
             cnt += 1
-            time_cost = round((time.time() - start) / cnt, 3)
+            time_cost = round((time.time() - start) / cnt, 0)
             time_left = str(datetime.timedelta(0, time_cost * (total_size - cnt)))
             print_progress_bar(cnt,
                                total_size,

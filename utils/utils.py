@@ -33,7 +33,9 @@ def print_progress_bar(iteration,
         ignored_length = print_length + 10 - width
         prefix = prefix[:(len(prefix) - ignored_length) // 2] + '....' + prefix[(len(prefix) + ignored_length) // 2:]
 
-    # os.system(clear_cmd)
+    # clear print line before output
+    six.print_(' ' * width, end='\r')
+
     six.print_('%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end='\r')
     # Print New Line on Complete
     if iteration == total:
