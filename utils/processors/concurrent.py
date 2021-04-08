@@ -30,8 +30,8 @@ class SimpleResult:
 
     @result.setter
     def result(self, obj):
-        self.ready.set()
         self._result = obj
+        self.ready.set()
 
 
 class ClearPipeThread(Thread):
