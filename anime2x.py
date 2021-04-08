@@ -44,14 +44,15 @@ p.add_argument('--devices', '-d', default=(-1,),
                -N for CPU, etc. -1 for 1 CPU and -8 for 8 CPUs.
                device_id >= 0 represents the related GPU device. 0 for GPU 0 and 1 for GPU 1.
                """)
-p.add_argument('--width', '-W', type=int, default=0)
-p.add_argument('--height', '-H', type=int, default=0)
 p.add_argument('--tilesize', '-t', type=int, default=0)
-p.add_argument('--scale', '-s', type=float, default=2.0)
 p.add_argument('--denoise', '-n', type=int, default=-1)
 p.add_argument('--tta_mode', type=bool, default=False)
 p.add_argument('--model', '-m', type=str, default="")
 p.add_argument('--frame_rate', '-f', type=float, default=None)
+scale_group = p.add_mutually_exclusive_group()
+scale_group.add_argument('--width', '-W', type=int, default=0)
+scale_group.add_argument('--height', '-H', type=int, default=0)
+scale_group.add_argument('--scale', '-s', type=float, default=2.0)
 
 args, unknown = p.parse_known_args()
 
