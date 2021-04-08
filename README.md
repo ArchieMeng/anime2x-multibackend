@@ -33,7 +33,7 @@ It has several advantages:
 
 - [x] waifu2x-chainer
 - [x] waifu2x-ncnn-vulkan
-- [ ] rife-ncnn-vulkan (Will come out soon)
+- [x] rife-ncnn-vulkan
 - [ ] srmd-ncnn-vulkan (Waiting for subproject srmd-ncnn-vulkan to start)
 
 ## Installation
