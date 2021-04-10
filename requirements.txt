@@ -3,5 +3,4 @@ future
 git+https://github.com/kkroening/ffmpeg-python
 numpy
 Pillow
-pymediainfo
 six

@@ -2,12 +2,10 @@ import argparse
 import os
 import queue
 import re
+from fractions import Fraction
 from math import floor
 
-import ffmpeg
-import six
-from pymediainfo import MediaInfo
-
+from utils import get_video_info
 from utils.processors.concurrent import WorkerProcess, FrameReaderThread, FrameWriterThread, Queue
 from utils.processors.params import ProcessParams, FFMPEGParams
 
@@ -57,43 +55,8 @@ scale_group.add_argument('--scale', '-s', type=float, default=2.0)
 args, unknown = p.parse_known_args()
 
 
-def get_framerate(videoInfo):
-    if 'framerate_num' in videoInfo['Video'] and 'framerate_den' in videoInfo['Video']:
-        return float(videoInfo['Video']['framerate_num']) / float(videoInfo['Video']['framerate_den'])
-    else:
-        return float(videoInfo['Video']['frame_rate'])
-
-
-def sync_tmpfile_av(tmp_file_name, video_info, params: FFMPEGParams):
-    tmp_file_info = {track.track_type: track.to_data()
-                     for track in MediaInfo.parse(tmp_file_name).tracks}
-
-    frame_not_equal = 'Video' in tmp_file_info and tmp_file_info['Video']['frame_count'] != video_info['Video'][
-        'frame_count']
-
-    if frame_not_equal:
-        six.print_("syncing video stream and audio stream")
-        audio_stream = ffmpeg.input(video_info['General']['complete_name'])['a']
-        video_stream = (
-            ffmpeg
-                .input(tmp_file_name)
-                .setpts("{}/{}*PTS".format(video_info['Video']['frame_count'], tmp_file_info['Video']['frame_count']))
-        )
-
-        (
-            ffmpeg
-                .output(video_stream,
-                        audio_stream,
-                        params.filepath,
-                        pix_fmt=args.pix_fmt,
-                        strict='experimental',
-                        r=video_info['Video']['frame_rate'], )
-                .overwrite_output()
-                .run(quiet=(not params.debug))
-        )
-        os.remove(tmp_file_name)
-    else:
-        os.rename(tmp_file_name, params.filepath)
+def get_framerate(video_info: dict):
+    return Fraction(video_info['video']['avg_frame_rate'])
 
 
 def process_video(video_info, processor_params: list[ProcessParams], params: FFMPEGParams):
@@ -104,7 +67,6 @@ def process_video(video_info, processor_params: list[ProcessParams], params: FFM
     :param params: the ffmpeg params for encoding
     :return: None
     """
-    tmp_file_name = f"{video_info['General']['file_name']}_tmp.{params.filepath.split('.')[-1]}"
     process_queue = Queue(2 * len(processor_params))
     process_result_queue = Queue()
     encoding_queue = queue.Queue()
@@ -121,8 +83,6 @@ def process_video(video_info, processor_params: list[ProcessParams], params: FFM
     for process in processes:
         process.join()
     encoder.join()
-
-    sync_tmpfile_av(tmp_file_name, video_info, params)
 
 
 if __name__ == "__main__":
@@ -147,13 +107,11 @@ if __name__ == "__main__":
         if os.path.isdir(file):  # bypass directory
             continue
 
-        video_info = {track.track_type: track.to_data()
-                      for track in MediaInfo.parse(file).tracks}
-        if 'Video' not in video_info:  # bypass non-video files
+        video_info = get_video_info(file)
+        if not video_info:  # bypass non-video files
             continue
 
-        width, height = video_info['Video']['width'], \
-                        video_info['Video']['height']
+        width, height = video_info['video']['width'], video_info['video']['height']
 
         if args.width != 0:
             args.scale = args.width / width
@@ -190,18 +148,12 @@ if __name__ == "__main__":
         if output_name:
             output_path = os.path.join(output_dir, output_name)
         else:
-            output_path = os.path.join(output_dir,
-                                       ''.join(
-                                           [str(video_info['General'][
-                                                    'file_name']),
-                                            '.',
-                                            args.extension])
-                                       )
+            output_path = os.path.join(output_dir, f"{video_info['file']['filename_noext']}.{args.extension}")
 
         # when output dir is specific and output files exist
         if os.path.exists(output_path) and output_name == "":
             output_path = os.path.join(output_dir, ''.join(
-                [str(video_info['General']['file_name']),
+                [str(video_info['file']['filename_noext']),
                  "[{}X{}]".format(output_width, output_height), '.',
                  args.extension]))
 

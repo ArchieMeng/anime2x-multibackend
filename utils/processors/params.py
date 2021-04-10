@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass, asdict, field
+from fractions import Fraction
 
 
 @dataclass
@@ -8,8 +9,8 @@ class ProcessParams:
     input_width: int
     input_height: int
     input_pix_fmt: str
-    original_frame_rate: float
-    frame_rate: float
+    original_frame_rate: Fraction
+    frame_rate: Fraction
     device_id: int
     model: str
     scale: float
@@ -34,7 +35,7 @@ class FFMPEGParams:
     width: int
     height: int
     pix_fmt: str
-    frame_rate: float
+    frame_rate: Fraction
     vcodec: str
     acodec: str
     crf: int

@@ -75,14 +75,15 @@ class FrameReaderThread(Thread):
         self.queue_count = 0
         SetResultThread(self.result_dict, result_q).start()
 
-        input_name = video_info['General']['complete_name']
+        input_name = video_info['file']['filename']
         self.decoder = (
             ffmpeg
                 .input(input_name)['v']
                 .output('pipe:',
                         format='rawvideo',
                         pix_fmt='rgb24',
-                        r=params.original_frame_rate)
+                        r=params.original_frame_rate,
+                        vsync='1')
                 .run_async(pipe_stdout=True,
                            pipe_stderr=(not self.params.debug))
         )
@@ -119,18 +120,15 @@ class FrameWriterThread(Thread):
         super().__init__()
         self.q = q
         self.params = params
-        self.total_size = round(video_info['General']['duration'] * params.frame_rate / 1000)
+        self.total_size = round(float(video_info['file']['duration']) * params.frame_rate)
 
-        input_name = video_info['General']['complete_name']
-        tmpFileName = (str(video_info['General']['file_name'])
-                       + '_tmp.'
-                       + str(params.filepath.split('.')[-1]))
-        if 'Audio' in video_info:
+        input_name = video_info['file']['filename']
+        if 'audio' in video_info:
 
             audioStream = ffmpeg.input(input_name)['a']
             videoStream = (
                 ffmpeg
-                    .input('pipe:', format='rawvideo', pix_fmt='rgb24',
+                    .input('pipe:', format='rawvideo', pix_fmt='rgb24', r=params.frame_rate, vsync='1',
                            s='{}x{}'.format(params.width, params.height))
             )
 
@@ -138,13 +136,14 @@ class FrameWriterThread(Thread):
                 ffmpeg
                     .output(videoStream,
                             audioStream,
-                            tmpFileName,
+                            params.filepath,
                             pix_fmt=params.pix_fmt,
                             strict='experimental',
                             vcodec=params.vcodec,
                             acodec=params.acodec,
                             r=params.frame_rate,
                             crf=params.crf,
+                            vsync='1',
                             **params.additional_params)
                     .overwrite_output()
                     .run_async(pipe_stdin=True,
@@ -153,11 +152,12 @@ class FrameWriterThread(Thread):
         else:
             self.encoder = (
                 ffmpeg
-                    .input('pipe:', format='rawvideo', pix_fmt='rgb24',
+                    .input('pipe:', format='rawvideo', pix_fmt='rgb24', r=params.frame_rate, vsync='1',
                            s='{}x{}'.format(params.width, params.height))
-                    .output(tmpFileName, pix_fmt=params.pix_fmt,
+                    .output(params.filepath, pix_fmt=params.pix_fmt,
                             vcodec=params.vcodec, acodec=params.acodec,
                             r=params.frame_rate, crf=params.crf,
+                            vsync='1',
                             **params.additional_params)
                     .overwrite_output()
                     .run_async(pipe_stdin=True,
