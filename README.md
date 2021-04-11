@@ -19,15 +19,13 @@ It has several advantages:
     - (Optional) Cupy (waifu2x-chainer's dependency. For Nvidia GPU support. For those who installed some strange
       versions of CUDA runtime, cupy-cudaXXX might be the correct module to be installed. note: XXX is the version
       number of CUDA runtime. etc. 10.0 -> 100, 7.5 -> 75)
-    - (Optional) [waifu2x-ncnn-vulkan-python](https://github.com/ArchieMeng/waifu2x-ncnn-vulkan-python) compiled shared
-      library. Needed for waifu2x-ncnn-vulkan backend.
-    - Pillow
-    - pymediainfo
-    - ffmpeg-python
-    - mediainfo:
-        - For Windows platform, mediainfo.dll (Put it under the program root directory or Windows' Path in environmental
-          varibles)
-        - For other platform, install mediainfo package.
+- (Optional) [waifu2x-ncnn-vulkan-python](https://github.com/ArchieMeng/waifu2x-ncnn-vulkan-python) compiled shared
+  library. Needed for waifu2x-ncnn-vulkan backend.
+- (Optional) [realsr-ncnn-vulkan-python](https://github.com/ArchieMeng/realsr-ncnn-vulkan-python) compiled shared
+  library. Needed for realsr-ncnn-vulkan backend.
+- Pillow
+- ffmpeg-python
+- ffmpeg
 
 ## Supported Backends
 
@@ -60,11 +58,45 @@ python anime2x.py
 
 All backend parameters are set by anime2x. It use universal parameters for all backends.
 
-By default, CPU mode is used for waifu2x-chainer and GPU 0 for waifu2x-ncnn-vulkan. If you want to use GPU in
-waifu2x-chainer backend, make sure CUDA and Cupy are installed, and you use '-g' with the gpu-id when calling this
-program.
+By default, CPU mode is used. To use GPU mode, make sure CUDA and Cupy are installed for waifu2x-chainer and Vulkan
+for *-ncnn-vulkan backends.
 
 ### Examples
+
+#### get help message:
+
+```bash
+python anime2x.py -h
+usage: anime2x.py [-h] [--vcodec VCODEC] [--acodec ACODEC] [--crf CRF] [--pix_fmt PIX_FMT] [--input INPUT] [--output OUTPUT] [--extension EXTENSION] [--debug] [--diff_based] [--backend BACKEND]
+                  [--devices device_id [device_id ...]] [--tilesize TILESIZE] [--denoise DENOISE] [--tta_mode TTA_MODE] [--model MODEL] [--frame_rate FRAME_RATE]
+                  [--width WIDTH | --height HEIGHT | --scale SCALE]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --vcodec VCODEC       The codec of output video stream(s) in ffmpeg
+  --acodec ACODEC       The codec of output audio stream(s)
+  --crf CRF             CRF setting for video encoding
+  --pix_fmt PIX_FMT     pixel format for output video(s)
+  --input INPUT, -i INPUT
+  --output OUTPUT, -o OUTPUT
+                        Output dir or output name
+  --extension EXTENSION, -e EXTENSION
+                        The extension name of output videos
+  --debug, -D
+  --diff_based, -DF     Enable difference based processing. In this mode, anime2x will only process changed frames blocks instead of the whole frames
+  --backend BACKEND, -b BACKEND
+                        The backend module to use. By default, waifu2x-ncnn-vulkan is used
+  --devices device_id [device_id ...], -d device_id [device_id ...]
+                        The device(s) to use. -N for CPU, etc. -1 for 1 CPU and -8 for 8 CPUs. device_id >= 0 represents the related GPU device. 0 for GPU 0 and 1 for GPU 1.
+  --tilesize TILESIZE, -t TILESIZE
+  --denoise DENOISE, -n DENOISE
+  --tta_mode TTA_MODE
+  --model MODEL, -m MODEL
+  --frame_rate FRAME_RATE, -f FRAME_RATE
+  --width WIDTH, -W WIDTH
+  --height HEIGHT, -H HEIGHT
+  --scale SCALE, -s SCALE
+```
 
 #### GPU 0 mode with input, scale and denoise level.
 
@@ -78,16 +110,28 @@ python anime2x.py -d 0 -i test.mp4 -s 2 -n 1
 - -s, --scale \[ float ]   : the scale ratio.
 - -n --noise_level \[ int ]    : denoise strength
 
-#### simply scale video and output with video codec HEVC & extension
+#### simply upscale video and output with video codec HEVC
 
 ```bash
 python anime2x.py -i video.mkv --vcodec libx265
 ```
 
+#### upscale video and output with two GPU 0 worker processes
+
+```bash
+python anime2x.py -i video.mkv -d 0 0
+```
+
+#### upscale video to 1080p
+
+```bash
+python anime2x.py -i video.mkv -H 1080
+```
+
 #### use waifu2x-ncnn-vulkan backend
 
 ```bash
-python anime2x.py -i video.mkv --backend waifu2x_ncnn_vulkan
+python anime2x.py -i video.mkv --backend waifu2x-ncnn-vulkan
 ```
 
 However, to use
@@ -111,9 +155,9 @@ python anime2x.py -D -i video.mkv
 
 ## How to support other versions of waifu2x?
 
-Write a module which contains "process_frame" function and place it in the "utils/processors" dir.
+Write a module which contains a class named "Processor" and place it in the "utils/processors" dir.
 
-### Example:
+### Processor class example:
 
 ```python
 """
@@ -131,7 +175,7 @@ class Processor:
         """
         This processor will return the original frame Image in its process function.
         :param params: parameters for processing. Will be ignored in this class.
-        :param postprocessor: the process that will be used on the result frame before returning it to caller.
+        :param postprocessor: the processor that will be used on the result frame before returning it to caller.
         """
         self.params = params
         self.postprocessor = postprocessor
@@ -148,8 +192,31 @@ class Processor:
         return im
 ```
 
+## Benchmarks
+
+Environment: GTX 1050Ti, python 3.9, Arch Linux
+
+#### File: [アニメ『ドールズフロントライン』ティザーPV／Anime[Girls' Frontline]teaser PV](https://www.youtube.com/watch?v=Bx5y9iwblpA) (Downscaled to 540p for benchmark)
+
+|backend|models|devices|Use DF|Timing|
+|---|---|---|---|---|
+|waifu2x-chainer|UpResNet10|GPU 0|Yes|0:10:32|
+|waifu2x-chainer|UpResNet10|GPU 0|No|0:12:21|
+|waifu2x-chainer|UpResNet10|GPU 0,GPU 0|Yes|0:09:13|
+|waifu2x-chainer|UpResNet10|GPU 0,GPU 0|No|0:11:02|
+|waifu2x-ncnn-vulkan|Cunet|GPU 0|Yes|0:24:07|
+|waifu2x-ncnn-vulkan|Cunet|GPU 0|No|0:30:11|
+
+#### File: [Airota&LoliHouse] Horimiya - 09 [WebRip 1080p HEVC-10bit AAC ASSx2].mkv
+
+|backend|models|devices|Use DF|Timing|
+|---|---|---|---|---|
+|waifu2x-chainer|UpResNet10|GPU 0,GPU 0|Yes|8:36:09|
+|waifu2x-chainer|UpResNet10|GPU 0,GPU 0|No|18:04:04|  
+
 ## Todo
 
+- [ ] full 10-bit video support
 - [ ] support video interpolation
 - [ ] multi-host processing
 - [ ] More efficient Video-only super-resolution algorithm
@@ -157,4 +224,4 @@ class Processor:
 ## Known Issues
 
 - run CPU processor along with GPU will slow down the whole process
-- ~~Currently running program without debug option will be stuck during the processing.~~(Fixed on 20210406)
+- run DF on 10bits video may produce incorrect color output
