@@ -39,7 +39,10 @@ def print_progress_bar(iteration,
         prefix = prefix[:(len(prefix) - ignored_length) // 2] + '....' + prefix[(len(prefix) + ignored_length) // 2:]
 
     # clear print line before output
-    six.print_(' ' * width, end='\r')
+    if sys.platform in ['win32', 'cygwin']:
+        six.print_(' ' * (width - 1), end='\r')
+    else:
+        six.print_(' ' * width, end='\r')
 
     six.print_('%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end='\r')
     # Print New Line on Complete
