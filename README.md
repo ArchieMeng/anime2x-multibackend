@@ -23,6 +23,8 @@ It has several advantages:
   library. Needed for waifu2x-ncnn-vulkan backend.
 - (Optional) [realsr-ncnn-vulkan-python](https://github.com/ArchieMeng/realsr-ncnn-vulkan-python) compiled shared
   library. Needed for realsr-ncnn-vulkan backend.
+- (Optional) [srmd-ncnn-vulkan-python](https://github.com/ArchieMeng/srmd-ncnn-vulkan-python) compiled shared library.
+  Needed for srmd-ncnn-vulkan backend.
 - Pillow
 - ffmpeg-python
 - ffmpeg
@@ -32,7 +34,7 @@ It has several advantages:
 - [x] waifu2x-chainer
 - [x] waifu2x-ncnn-vulkan
 - [x] rife-ncnn-vulkan
-- [ ] srmd-ncnn-vulkan (Waiting for subproject srmd-ncnn-vulkan to start)
+- [x] srmd-ncnn-vulkan
 
 ## Installation
 
