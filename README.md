@@ -25,6 +25,8 @@ It has several advantages:
   library. Needed for realsr-ncnn-vulkan backend.
 - (Optional) [srmd-ncnn-vulkan-python](https://github.com/ArchieMeng/srmd-ncnn-vulkan-python) compiled shared library.
   Needed for srmd-ncnn-vulkan backend.
+- (Optional) [rife-ncnn-vulkan-python](https://github.com/ArchieMeng/rife-ncnn-vulkan-python) compiled shared library.
+  Needed for rife-ncnn-vulkan backend.
 - Pillow
 - ffmpeg-python
 - ffmpeg
@@ -35,6 +37,9 @@ It has several advantages:
 - [x] waifu2x-ncnn-vulkan
 - [x] rife-ncnn-vulkan
 - [x] srmd-ncnn-vulkan
+- [x] rife-ncnn-vulkan
+- [ ] cain-ncnn-vulkan
+- [ ] dain-ncnn-vulkan
 
 ## Installation
 
@@ -69,9 +74,9 @@ for *-ncnn-vulkan backends.
 
 ```bash
 python anime2x.py -h
-usage: anime2x.py [-h] [--vcodec VCODEC] [--acodec ACODEC] [--crf CRF] [--pix_fmt PIX_FMT] [--input INPUT] [--output OUTPUT] [--extension EXTENSION] [--debug] [--diff_based] [--backend BACKEND]
-                  [--devices device_id [device_id ...]] [--tilesize TILESIZE] [--denoise DENOISE] [--tta_mode TTA_MODE] [--model MODEL] [--frame_rate FRAME_RATE]
-                  [--width WIDTH | --height HEIGHT | --scale SCALE]
+usage: anime2x.py [-h] [--vcodec VCODEC] [--acodec ACODEC] [--crf CRF] [--pix_fmt PIX_FMT] [--input INPUT] [--output OUTPUT] [--extension EXTENSION] [--debug]
+                  [--diff_based] [--backend BACKEND] [--devices device_id [device_id ...]] [--tilesize TILESIZE] [--denoise DENOISE] [--tta_mode TTA_MODE]
+                  [--model MODEL] [--frame_ratio FRAME_RATIO] [--width WIDTH | --height HEIGHT | --scale SCALE]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -89,12 +94,13 @@ optional arguments:
   --backend BACKEND, -b BACKEND
                         The backend module to use. By default, waifu2x-ncnn-vulkan is used
   --devices device_id [device_id ...], -d device_id [device_id ...]
-                        The device(s) to use. -N for CPU, etc. -1 for 1 CPU and -8 for 8 CPUs. device_id >= 0 represents the related GPU device. 0 for GPU 0 and 1 for GPU 1.
+                        The device(s) to use. -N for CPU, etc. -1 for 1 CPU and -8 for 8 CPUs. device_id >= 0 represents the related GPU device. 0 for GPU 0 and 1
+                        for GPU 1.
   --tilesize TILESIZE, -t TILESIZE
   --denoise DENOISE, -n DENOISE
   --tta_mode TTA_MODE
   --model MODEL, -m MODEL
-  --frame_rate FRAME_RATE, -f FRAME_RATE
+  --frame_ratio FRAME_RATIO, -f FRAME_RATIO
   --width WIDTH, -W WIDTH
   --height HEIGHT, -H HEIGHT
   --scale SCALE, -s SCALE
@@ -135,6 +141,14 @@ python anime2x.py -i video.mkv -H 1080
 ```bash
 python anime2x.py -i video.mkv --backend waifu2x-ncnn-vulkan
 ```
+
+#### use rife-ncnn-vulkan backend to smooth video
+
+```bash
+python anime2x.py -i video.mkv -s 1 -f 2 --backend rife-ncnn-vulkan
+```
+
+* **"-f/--frame_ratio 1"** and **"-s/--scale 1"** are currently required for interpolation
 
 However, to use
 waifu2x-ncnn-vulkan, [waifu2x-ncnn-vulkan-python](https://github.com/ArchieMeng/waifu2x-ncnn-vulkan-python)
@@ -218,7 +232,7 @@ Environment: GTX 1050Ti, python 3.9, Arch Linux
 
 ## Todo
 
-- [ ] full 10-bit video support
+- [ ] fix 10-bit video bugs
 - [ ] support video interpolation
 - [ ] multi-host processing
 - [ ] More efficient Video-only super-resolution algorithm

@@ -1,7 +1,10 @@
 import datetime
 import importlib
+import importlib.util
 import queue
 import time
+from collections import deque
+from inspect import signature
 from multiprocessing import Queue, get_context
 from pathlib import Path
 from threading import Thread, Event
@@ -54,10 +57,10 @@ class SetResultThread(Thread):
         while True:
             task_result = self.result_q.get()
             if task_result:
-                task_id, im = task_result
-                self.result_dict[task_id].result = im
+                task_id, result = task_result
+                self.result_dict[task_id].result = result
                 del self.result_dict[task_id]
-                del im
+                del result
             elif self.result_dict:
                 continue
             else:
@@ -74,6 +77,11 @@ class FrameReaderThread(Thread):
         self.result_dict = {}
         self.queue_count = 0
         SetResultThread(self.result_dict, result_q).start()
+
+        backend = importlib.import_module(f"{__package__}.{self.params.backend}")
+
+        self.buffer_size = len(signature(backend.Processor.process).parameters) - 1
+        self.buffer = deque()
 
         input_name = video_info['file']['filename']
         self.decoder = (
@@ -100,12 +108,16 @@ class FrameReaderThread(Thread):
                 return
 
             im = Image.frombytes('RGB', (self.params.input_width, self.params.input_height), b)
+            self.buffer.append(im)
 
             # release bytes as soon as possible
             del b
 
             self.result_dict[self.queue_count] = result = SimpleResult()
-            self.in_q.put((self.queue_count, im))
+            self.in_q.put((self.queue_count, tuple(self.buffer)))
+
+            if len(self.buffer) == self.buffer_size:  # keep buffer size within buffer_size
+                self.buffer.popleft()
 
             # release image as soon as possible
             del im
@@ -120,8 +132,8 @@ class FrameWriterThread(Thread):
         super().__init__()
         self.q = q
         self.params = params
-        self.total_size = round(float(video_info['file']['duration']) * params.frame_rate)
 
+        self.total_size = round(float(video_info['file']['duration']) * params.frame_rate)
         input_name = video_info['file']['filename']
         if 'audio' in video_info:
 
@@ -179,16 +191,18 @@ class FrameWriterThread(Thread):
                 six.print_("processing time: " + str(datetime.timedelta(0, time.time() - start)))
                 return
 
-            b = np.array(result.result).tobytes()
-            self.encoder.stdin.write(b)
+            for im in result.result:
+                b = np.array(im).tobytes()
+                self.encoder.stdin.write(b)
+
+            cnt += len(result.result)
+            time_cost = (time.time() - start) / cnt
+            time_left = str(datetime.timedelta(0, round(time_cost * (total_size - cnt), 0)))
 
             # release these objects as soon as possible
             del result
             del b
 
-            cnt += 1
-            time_cost = (time.time() - start) / cnt
-            time_left = str(datetime.timedelta(0, round(time_cost * (total_size - cnt), 0)))
             print_progress_bar(cnt,
                                total_size,
                                self.params.filepath,
@@ -206,10 +220,7 @@ class WorkerProcess(ctx.Process):
         self.processor = None
 
     def run(self) -> None:
-        if __package__:
-            backend = importlib.import_module(f"{__package__}.{self.params.backend}")
-        else:
-            backend = importlib.import_module(str(package_dir.joinpath(self.params.backend)))
+        backend = importlib.import_module(f"{__package__}.{self.params.backend}")
         self.processor = backend.Processor(self.params)
         if self.params.diff_based:
             from .simple.diff_based import DiffBasedProcessor
@@ -218,18 +229,21 @@ class WorkerProcess(ctx.Process):
         while True:
             task = self.in_q.get()
             if task:
-                task_id, im = task
+                task_id, ims = task
                 if self.params.debug:
                     six.print_(f"{self.name}: processing {task_id}")
 
-                im = self.processor.process(im)
+                ims = self.processor.process(*ims)
                 if self.params.debug:
                     six.print_(f"{self.name}: {task_id} done")
 
-                self.out_q.put((task_id, im))
+                if not isinstance(ims, tuple):
+                    ims = (ims,)
+
+                self.out_q.put((task_id, ims))
 
                 # delete im obj as soon as possible
-                del im
+                del ims
             else:
                 # notify other processes
                 self.in_q.put(None)

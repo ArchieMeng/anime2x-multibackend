@@ -36,7 +36,7 @@ p.add_argument('--diff_based', '-DF',
 p.add_argument("--backend", '-b', default="waifu2x_ncnn_vulkan",
                help="""The backend module to use. 
                By default, waifu2x-ncnn-vulkan is used""")
-p.add_argument('--devices', '-d', default=(-1,),
+p.add_argument('--devices', '-d', default=(0,),
                nargs="+", type=int, metavar="device_id",
                help="""The device(s) to use.
                -N for CPU, etc. -1 for 1 CPU and -8 for 8 CPUs.
@@ -46,7 +46,7 @@ p.add_argument('--tilesize', '-t', type=int, default=0)
 p.add_argument('--denoise', '-n', type=int, default=-1)
 p.add_argument('--tta_mode', type=bool, default=False)
 p.add_argument('--model', '-m', type=str, default="")
-p.add_argument('--frame_rate', '-f', type=float, default=None)
+p.add_argument('--frame_ratio', '-f', type=float, default=1.)
 scale_group = p.add_mutually_exclusive_group()
 scale_group.add_argument('--width', '-W', type=int, default=0)
 scale_group.add_argument('--height', '-H', type=int, default=0)
@@ -133,7 +133,7 @@ if __name__ == "__main__":
                 input_height=height,
                 input_pix_fmt='RGB',
                 original_frame_rate=get_framerate(video_info),
-                frame_rate=args.frame_rate or get_framerate(video_info),
+                frame_rate=args.frame_ratio * get_framerate(video_info),
                 debug=args.debug,
                 model=args.model,
                 scale=args.scale,
@@ -167,5 +167,5 @@ if __name__ == "__main__":
                           acodec=args.acodec,
                           crf=args.crf,
                           debug=args.debug,
-                          frame_rate=args.frame_rate or get_framerate(video_info),
+                          frame_rate=args.frame_ratio * get_framerate(video_info),
                           pix_fmt=args.pix_fmt))

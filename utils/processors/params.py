@@ -25,6 +25,11 @@ class ProcessParams:
     def to_json(self):
         return json.dumps(asdict(self))
 
+    @staticmethod
+    def from_json(cls, s: str):
+        # Todo: implement from json method or from yaml method
+        pass
+
 
 @dataclass
 class FFMPEGParams:
