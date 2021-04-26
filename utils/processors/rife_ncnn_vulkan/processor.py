@@ -1,4 +1,9 @@
+from __future__ import annotations
+
 from argparse import ArgumentParser
+from typing import Union
+
+from PIL import Image
 
 from .rife_ncnn_vulkan import RIFE
 from ..params import ProcessParams
@@ -13,7 +18,7 @@ def get_parser() -> ArgumentParser:
 class Processor:
     def __init__(self, params: ProcessParams):
         p = get_parser()
-        self.args = p.parse_args(params.additional_args)
+        self.args, _ = p.parse_known_args(params.additional_args)
         self.interpolator = RIFE(
             gpuid=params.device_id,
             model=params.model or "rife-HD",
@@ -22,8 +27,8 @@ class Processor:
             num_threads=params.n_threads,
         )
 
-    def process(self, im0, im1=None) -> tuple:
+    def process(self, im0: Image, im1: Image = None) -> Union[Image, tuple]:
         if im1:
             return im0, self.interpolator.process(im0, im1)
         else:
-            return im0,
+            return im0
