@@ -39,7 +39,7 @@ class SimpleResult:
 
 class ClearPipeThread(Thread):
     def __init__(self, pipe):
-        super().__init__()
+        super().__init__(daemon=True)
         self.pipe = pipe
 
     def run(self) -> None:
@@ -49,7 +49,7 @@ class ClearPipeThread(Thread):
 
 class SetResultThread(Thread):
     def __init__(self, result_dict: dict, result_q: Queue):
-        super().__init__()
+        super().__init__(daemon=True)
         self.result_dict = result_dict
         self.result_q = result_q
 
@@ -69,7 +69,7 @@ class SetResultThread(Thread):
 
 class FrameReaderThread(Thread):
     def __init__(self, video_info, in_q: Queue, result_q: Queue, out_q: queue.Queue, params: ProcessParams):
-        super().__init__()
+        super().__init__(daemon=True)
         self.in_q = in_q
         self.result_q = result_q
         self.out_q = out_q
@@ -129,14 +129,13 @@ class FrameReaderThread(Thread):
 
 class FrameWriterThread(Thread):
     def __init__(self, video_info, q: queue.Queue, params: FFMPEGParams):
-        super().__init__()
+        super().__init__(daemon=True)
         self.q = q
         self.params = params
 
         self.total_size = round(float(video_info['file']['duration']) * params.frame_rate)
         input_name = video_info['file']['filename']
         if 'audio' in video_info:
-
             audioStream = ffmpeg.input(input_name)['a']
             videoStream = (
                 ffmpeg
@@ -237,7 +236,7 @@ class WorkerProcess(ctx.Process):
                 if self.params.debug:
                     six.print_(f"{self.name}: {task_id} done")
 
-                if not isinstance(ims, tuple):
+                if not isinstance(ims, (tuple, list)):
                     ims = (ims,)
 
                 self.out_q.put((task_id, ims))
