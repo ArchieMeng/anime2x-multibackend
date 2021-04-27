@@ -241,5 +241,4 @@ Environment: GTX 1050Ti, python 3.9, Arch Linux
 
 - run CPU processor along with GPU will slow down the whole process
 - run DF on 10bits video may produce incorrect color output
-- The DF supports for video interpolation is working in progress. It will be published once fully tested.
 - The default parameters are designed for video superresolution. To use video interpolation, -s 1 -f 2 should be used.

@@ -1,6 +1,8 @@
 import argparse
 import time
+from inspect import signature
 from multiprocessing import Lock
+from typing import Union
 
 import numpy as np
 from PIL import Image
@@ -18,15 +20,16 @@ def get_parser() -> argparse.ArgumentParser:
 
 
 class DiffBasedProcessor(BaseProcessor):
-    def __init__(self, params: ProcessParams, postprocessor: BaseProcessor):
+    def __init__(self, params: ProcessParams, postprocessor):
         super().__init__(params, postprocessor)
         p = get_parser()
-        self.args = p.parse_args(params.additional_args)
+        self.args, _ = p.parse_known_args(params.additional_args)
         self._bench_mark_lock = Lock()
+        self.buffer_size = len(signature(postprocessor.process).parameters)
         self.last_frame = Image.new(params.input_pix_fmt, (params.input_width, params.input_height))
-        self.last_result = Image.new(
-            params.input_pix_fmt,
-            (int(params.input_width * params.scale), int(params.input_height * params.scale)))
+        self.last_result = (Image.new(params.input_pix_fmt,
+                                      (int(params.input_width * params.scale),
+                                       int(params.input_height * params.scale))),)
         self.costs = {}
         self.update_processing_timecosts()
 
@@ -37,12 +40,12 @@ class DiffBasedProcessor(BaseProcessor):
         ss = min(self.params.input_width, self.params.input_height)  # short edge length of source
         sl = max(self.params.input_width, self.params.input_height)  # long edge length of source
 
-        def dummy_workload(bs: int, img=None):
-            im = img or Image.new('RGB', (bs, bs))
+        def dummy_workload(bs: int, _ims=None):
+            _ims = _ims or tuple(Image.new('RGB', (bs, bs)) for i in range(self.buffer_size))
             for _ in range(self.args.epoch):  # get average cost time
-                im_array = np.array(im)
-                np.array(im) - im_array
-                self.postprocessor.process(im)
+                im_array = np.array(_ims[0])
+                np.array(_ims[0]) - im_array
+                self.postprocessor.process(*_ims)
 
         with self._bench_mark_lock:
             # get partial frame process time costs
@@ -55,8 +58,8 @@ class DiffBasedProcessor(BaseProcessor):
 
             # get full frame process time cost
             t = time.time()
-            im = Image.new('RGB', (sl, ss))
-            dummy_workload(ss, im)
+            _ims = tuple(Image.new('RGB', (sl, ss)) for i in range(self.buffer_size))
+            dummy_workload(ss, _ims)
             self.costs[sl] = (time.time() - t) / self.args.epoch
 
     def choose_best_diff_block_size(self, diff: np.ndarray):
@@ -86,33 +89,49 @@ class DiffBasedProcessor(BaseProcessor):
                 return bs, []
         return best_sz, diff_locations
 
-    def process(self, im: Image) -> Image:
-        im_bytes, pre_fbytes, pre_rbytes = (np.array(im),
-                                            np.array(self.last_frame),
-                                            np.array(self.last_result))
+    def process(self, *ims) -> Union[tuple, list]:
+        if len(ims) > 1:  # do current inter frame difference for interpolation tasks
+            self.last_frame = ims[0]
+            self.last_result = [ims[0]] * len(ims)
+
+        im_bytes, pre_fbytes = np.array(ims[-1]), np.array(self.last_frame)
+        pre_rbytes = [np.array(im) for im in self.last_result]
         diff = im_bytes - pre_fbytes  # difference array calculated directly be minus them
         sw, sh = self.params.input_width, self.params.input_height  # source size (width, height)
         bs, diff_locations = self.choose_best_diff_block_size(diff)
         bw = bh = bs
         sl = max(self.params.input_width, self.params.input_height)
+        outputs = None
 
         # bypass diff-based method if do full frame processing is faster
         if diff_locations:
             if bw == sl:
-                pre_rbytes = np.array(self.postprocessor.process(im))
+                outputs = self.postprocessor.process(*ims)
+                outputs = [im for im in outputs] if isinstance(outputs, tuple) else [outputs]
             else:
                 for iw, ih in diff_locations:
                     #  source image width dim destination, source image height dim destination
                     sw_des, sh_des = min(iw + bw, sw), min(ih + bh, sh)
-                    block = np.array(
-                        self.postprocessor
-                            .process(im.crop((iw, ih, sw_des, sh_des)))
-                            .convert(self.params.input_pix_fmt))
-                    pre_rbytes[
-                    int(ih * self.params.scale): int(sh_des * self.params.scale),
-                    int(iw * self.params.scale): int(sw_des * self.params.scale)
-                    ] = block
-        result = Image.fromarray(pre_rbytes, self.params.input_pix_fmt)
-        self.last_frame = im
-        self.last_result = result
-        return result
+                    blocks = self.postprocessor.process(*(im.crop((iw, ih, sw_des, sh_des)) for im in ims))
+                    if not isinstance(blocks, tuple):
+                        blocks = [blocks]
+
+                    if not pre_rbytes:
+                        pre_rbytes = [np.array(Image.new(
+                            self.params.input_pix_fmt,
+                            (int(self.params.input_width * self.params.scale),
+                             int(self.params.input_height * self.params.scale))))
+                            for _ in range(len(blocks))]
+                    elif len(pre_rbytes) < len(blocks):
+                        n_filling = len(blocks) - len(pre_rbytes)
+                        pre_rbytes += [pre_rbytes[-1].copy() for _ in range(n_filling)]
+
+                    for i, block in enumerate(blocks):
+                        pre_rbytes[i][
+                        int(ih * self.params.scale): int(sh_des * self.params.scale),
+                        int(iw * self.params.scale): int(sw_des * self.params.scale)
+                        ] = np.array(block)
+
+        self.last_frame = ims[-1]
+        self.last_result = outputs or [Image.fromarray(b, self.params.input_pix_fmt) for b in pre_rbytes]
+        return self.last_result
