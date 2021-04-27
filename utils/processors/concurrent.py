@@ -135,45 +135,30 @@ class FrameWriterThread(Thread):
 
         self.total_size = round(float(video_info['file']['duration']) * params.frame_rate)
         input_name = video_info['file']['filename']
+        streams = [(ffmpeg.input('pipe:', format='rawvideo', pix_fmt='rgb24', r=params.frame_rate, vsync='1',
+                                 s='{}x{}'.format(params.width, params.height))), ]
         if 'audio' in video_info:
-            audioStream = ffmpeg.input(input_name)['a']
-            videoStream = (
-                ffmpeg
-                    .input('pipe:', format='rawvideo', pix_fmt='rgb24', r=params.frame_rate, vsync='1',
-                           s='{}x{}'.format(params.width, params.height))
-            )
+            streams.append(ffmpeg.input(input_name)['a'])
 
-            self.encoder = (
-                ffmpeg
-                    .output(videoStream,
-                            audioStream,
-                            params.filepath,
-                            pix_fmt=params.pix_fmt,
-                            strict='experimental',
-                            vcodec=params.vcodec,
-                            acodec=params.acodec,
-                            r=params.frame_rate,
-                            crf=params.crf,
-                            vsync='1',
-                            **params.additional_params)
-                    .overwrite_output()
-                    .run_async(pipe_stdin=True,
-                               quiet=(not params.debug))
-            )
-        else:
-            self.encoder = (
-                ffmpeg
-                    .input('pipe:', format='rawvideo', pix_fmt='rgb24', r=params.frame_rate, vsync='1',
-                           s='{}x{}'.format(params.width, params.height))
-                    .output(params.filepath, pix_fmt=params.pix_fmt,
-                            vcodec=params.vcodec, acodec=params.acodec,
-                            r=params.frame_rate, crf=params.crf,
-                            vsync='1',
-                            **params.additional_params)
-                    .overwrite_output()
-                    .run_async(pipe_stdin=True,
-                               quiet=(not params.debug))
-            )
+        if 'subtitle' in video_info:
+            streams.append(ffmpeg.input(input_name)['s'])
+
+        self.encoder = (
+            ffmpeg
+                .output(*streams,
+                        params.filepath,
+                        pix_fmt=params.pix_fmt,
+                        strict='experimental',
+                        vcodec=params.vcodec,
+                        acodec=params.acodec,
+                        r=params.frame_rate,
+                        crf=params.crf,
+                        vsync='1',
+                        **params.additional_params)
+                .overwrite_output()
+                .run_async(pipe_stdin=True,
+                           quiet=(not params.debug))
+        )
 
     def run(self) -> None:
         cnt = 0
