@@ -44,7 +44,7 @@ def print_progress_bar(iteration,
     else:
         six.print_(' ' * width, end='\r')
 
-    six.print_('%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end='\r')
+    six.print_('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end='')
     # Print New Line on Complete
     if iteration == total:
         print()

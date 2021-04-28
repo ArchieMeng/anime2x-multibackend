@@ -93,11 +93,8 @@ class FrameReaderThread(Thread):
                         r=params.original_frame_rate,
                         vsync='1')
                 .run_async(pipe_stdout=True,
-                           pipe_stderr=(not self.params.debug))
+                           quiet=(not self.params.debug))
         )
-
-        if not self.params.debug:
-            ClearPipeThread(self.decoder.stderr).start()
 
     def run(self) -> None:
         while True:
