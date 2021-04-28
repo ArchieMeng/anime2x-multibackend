@@ -21,7 +21,7 @@ class Processor:
         self.args, _ = p.parse_known_args(params.additional_args)
         self.interpolator = RIFE(
             gpuid=params.device_id,
-            model=params.model or "rife-HD",
+            model=params.model or "rife-v2.4",
             tta_mode=params.tta_mode,
             uhd_mode=self.args.uhd_mode,
             num_threads=params.n_threads,
