@@ -1,6 +1,6 @@
 git+https://github.com/chainer/chainer
 future
-git+https://github.com/kkroening/ffmpeg-python
+git+https://github.com/archiemeng/ffmpeg-python
 numpy
 Pillow
 six
