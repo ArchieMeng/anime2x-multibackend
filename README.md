@@ -27,6 +27,7 @@ It has several advantages:
   Needed for srmd-ncnn-vulkan backend.
 - (Optional) [rife-ncnn-vulkan-python](https://github.com/ArchieMeng/rife-ncnn-vulkan-python) compiled shared library.
   Needed for rife-ncnn-vulkan backend.
+- GLIBC >= 2.29, if you are using *-ncnn-vulkan on Linux.
 - Pillow
 - ffmpeg-python
 - ffmpeg
@@ -40,6 +41,15 @@ It has several advantages:
 - [x] rife-ncnn-vulkan
 - [ ] cain-ncnn-vulkan
 - [ ] dain-ncnn-vulkan
+
+## Google Colab usages
+
+Go to Google Colab website, and use the **anime2x.ipynb** from the **colab** branch of this repo.
+
+You may need to
+
+- upload videos to your Google Drive and share with a link
+- or upload it within the Colab file browser.
 
 ## Installation
 
@@ -65,8 +75,7 @@ python anime2x.py
 
 All backend parameters are set by anime2x. It use universal parameters for all backends.
 
-By default, CPU mode is used. To use GPU mode, make sure CUDA and Cupy are installed for waifu2x-chainer and Vulkan
-for *-ncnn-vulkan backends.
+By default, GPU 0 is used. To use other GPUs or CPUs, specify "-d" option with the device id.
 
 ### Examples
 
@@ -232,8 +241,8 @@ Environment: GTX 1050Ti, python 3.9, Arch Linux
 
 ## Todo
 
-- [ ] fix 10-bit video bugs
 - [x] support video interpolation
+- [ ] fractional frames interpolation ratio supports (Like from 24fps to 60fps)
 - [ ] multi-host processing
 - [ ] More efficient Video-only super-resolution algorithm
 
