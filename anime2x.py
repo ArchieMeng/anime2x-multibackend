@@ -71,7 +71,7 @@ def process_video(video_info, processor_params: list[ProcessParams], params: FFM
     """
     process_queue = Queue(2 * len(processor_params))
     process_result_queue = Queue()
-    encoding_queue = queue.Queue()
+    encoding_queue = queue.Queue(2 * len(processor_params))
     reader = FrameReaderThread(video_info, process_queue, process_result_queue, encoding_queue, processor_params[0])
     encoder = FrameWriterThread(video_info, encoding_queue, params)
     processes = [WorkerProcess(p, process_queue, process_result_queue, daemon=True) for p in processor_params]

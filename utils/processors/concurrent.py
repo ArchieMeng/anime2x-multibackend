@@ -36,6 +36,10 @@ class SimpleResult:
         self._result = obj
         self.ready.set()
 
+    @result.deleter
+    def result(self):
+        del self._result
+
 
 class ClearPipeThread(Thread):
     def __init__(self, pipe):
@@ -211,6 +215,10 @@ class WorkerProcess(ctx.Process):
             task = self.in_q.get()
             if task:
                 task_id, ims = task
+
+                # delete task obj as soon as possible
+                del task
+
                 if self.params.debug:
                     six.print_(f"{self.name}: processing {task_id}")
 
