@@ -5,7 +5,7 @@ import os
 import queue
 import re
 from fractions import Fraction
-from math import floor
+from math import floor, log2
 
 from utils import get_video_info
 from utils.processors.concurrent import WorkerProcess, FrameReaderThread, FrameWriterThread, Queue
@@ -48,7 +48,11 @@ p.add_argument('--tilesize', '-t', type=int, default=0)
 p.add_argument('--denoise', '-n', type=int, default=-1)
 p.add_argument('--tta_mode', type=bool, default=False)
 p.add_argument('--model', '-m', type=str, default="")
-p.add_argument('--frame_ratio', '-f', type=float, default=1.)
+
+frame_group = p.add_mutually_exclusive_group()
+frame_group.add_argument('--frame_ratio', '-f', type=float, default=1.)
+frame_group.add_argument('--fps', '-fps', type=float, default=None)
+
 scale_group = p.add_mutually_exclusive_group()
 scale_group.add_argument('--width', '-W', type=int, default=0)
 scale_group.add_argument('--height', '-H', type=int, default=0)
@@ -120,6 +124,13 @@ if __name__ == "__main__":
         if args.height != 0:
             args.scale = args.height / height
 
+        # the actual frame ratio should only be 2^n, in which n is int. This is required for backends.
+        if args.fps:
+            args.frame_ratio = Fraction(2 ** round(log2(args.fps / get_framerate(video_info))))
+        else:
+            args.fps = get_framerate(video_info) * args.frame_ratio
+            args.frame_ratio = Fraction(2 ** round(log2(args.frame_ratio)))
+
         output_width = floor(width * args.scale)
         output_height = floor(height * args.scale)
 
@@ -134,8 +145,8 @@ if __name__ == "__main__":
                 input_width=width,
                 input_height=height,
                 input_pix_fmt='RGB',
-                original_frame_rate=get_framerate(video_info),
-                frame_rate=args.frame_ratio * get_framerate(video_info),
+                original_frame_rate=args.fps / args.frame_ratio,
+                frame_rate=args.fps,
                 debug=args.debug,
                 model=args.model,
                 scale=args.scale,
@@ -169,5 +180,5 @@ if __name__ == "__main__":
                           acodec=args.acodec,
                           crf=args.crf,
                           debug=args.debug,
-                          frame_rate=args.frame_ratio * get_framerate(video_info),
+                          frame_rate=args.fps,
                           pix_fmt=args.pix_fmt))
