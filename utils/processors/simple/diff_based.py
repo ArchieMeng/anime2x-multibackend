@@ -27,9 +27,10 @@ class DiffBasedProcessor(BaseProcessor):
         self._bench_mark_lock = Lock()
         self.buffer_size = len(signature(postprocessor.process).parameters)
         self.last_frame = Image.new(params.input_pix_fmt, (params.input_width, params.input_height))
-        self.last_result = (Image.new(params.input_pix_fmt,
-                                      (int(params.input_width * params.scale),
-                                       int(params.input_height * params.scale))),)
+        self.last_result = tuple(Image.new(params.input_pix_fmt,
+                                           (int(params.input_width * params.scale),
+                                            int(params.input_height * params.scale)))
+                                 for _ in range(int(params.frame_rate / params.original_frame_rate)))
         self.costs = {}
         self.update_processing_timecosts()
 
@@ -131,6 +132,9 @@ class DiffBasedProcessor(BaseProcessor):
                         int(ih * self.params.scale): int(sh_des * self.params.scale),
                         int(iw * self.params.scale): int(sw_des * self.params.scale)
                         ] = np.array(block)
+        else:
+            outputs = tuple(self.last_result[-1]
+                            for _ in range(int(self.params.frame_rate / self.params.original_frame_rate)))
 
         self.last_frame = ims[-1]
         self.last_result = outputs or [Image.fromarray(b, self.params.input_pix_fmt) for b in pre_rbytes]
