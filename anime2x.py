@@ -25,6 +25,7 @@ p.add_argument('--pix_fmt', default="yuv420p",
 p.add_argument('--input', '-i', default='test.mp4')
 p.add_argument('--output', '-o', default='./',
                help="Output dir or output name")
+p.add_argument('--overwrite', '-y', help="Overwrite output files without asking.", action='store_true')
 p.add_argument('--extension', '-e', default='mp4',
                help="The extension name of output videos")
 p.add_argument('--debug', '-D', action='store_true')
@@ -109,6 +110,9 @@ if __name__ == "__main__":
     else:
         output_name = args.output
 
+    skip = False  # skip all existing outputs
+    rename = False  # rename all existing outputs
+
     for file in map(lambda x: os.path.join(input_dir, x), files):
         if os.path.isdir(file):  # bypass directory
             continue
@@ -164,11 +168,52 @@ if __name__ == "__main__":
             output_path = os.path.join(output_dir, f"{video_info['file']['filename_noext']}.{args.extension}")
 
         # when output dir is specific and output files exist
-        if os.path.exists(output_path) and output_name == "":
-            output_path = os.path.join(output_dir, ''.join(
-                [str(video_info['file']['filename_noext']),
-                 "[{}X{}]".format(output_width, output_height), '.',
-                 args.extension]))
+        if os.path.exists(output_path):
+            if skip:
+                continue
+
+            if rename:
+                output_path = os.path.join(output_dir, ''.join(
+                    [str(video_info['file']['filename_noext']),
+                     "[{}X{}]".format(output_width, output_height), '.',
+                     args.extension]))
+
+            elif not args.overwrite:
+                if output_name == "":
+                    print(f'{output_path} exists, do you want to')
+
+                    opt = ""
+                    skip_current = False  # skip current video processing
+                    while not opt:
+                        opt = input("[r]ename with adding resolution tag, [R]ename all, "
+                                    "[o]verwrite, [O]verwrite all,"
+                                    "[s]kip, [S]kip all\n")
+                        opt = opt.strip()
+                        if opt == 'o':
+                            pass
+                        elif opt == 'O':
+                            args.overwrite = True
+                        elif opt == 's':
+                            skip_current = True
+                            break
+                        elif opt == 'S':
+                            skip = True
+                            skip_current = True
+                            break
+                        elif opt in ('r', 'R'):
+                            if opt == 'R':
+                                rename = True
+                            output_path = os.path.join(output_dir, ''.join(
+                                [str(video_info['file']['filename_noext']),
+                                 "[{}X{}]".format(output_width, output_height), '.',
+                                 args.extension]))
+                        else:
+                            print(f"'{opt}' is invalid.")
+                            opt = ""
+
+                    # skip current video processing
+                    if skip_current:
+                        continue
 
         process_video(video_info,
                       process_params,
