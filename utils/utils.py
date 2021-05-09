@@ -93,6 +93,9 @@ def get_video_info(video_path):
         else:
             video_info[stream['codec_type']] = [stream]
 
+    if 'video' not in video_info:
+        return {}
+
     video_info['video'] = video_info['video'][0]
     video_info['file']['filename_noext'] = Path(video_info['file']['filename']).name.split('.')[0]
     return video_info
