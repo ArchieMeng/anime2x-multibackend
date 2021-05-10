@@ -45,7 +45,7 @@ def print_progress_bar(iteration,
         six.print_(' ' * width, end='\r')
 
     # print \r first to avoid empty output on colab
-    six.print_('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end='')
+    six.print_('%s |%s| %s%% %s\r' % (prefix, bar, percent, suffix), end='')
     # Print New Line on Complete
     if iteration == total:
         print()
