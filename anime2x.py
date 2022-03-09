@@ -46,7 +46,7 @@ p.add_argument('--devices', '-d', default=(0,),
                device_id >= 0 represents the related GPU device. 0 for GPU 0 and 1 for GPU 1.
                """)
 p.add_argument('--tilesize', '-t', type=int, default=0)
-p.add_argument('--denoise', '-n', type=int, default=-1)
+p.add_argument('--denoise', '-n', type=int, default=0)
 p.add_argument('--tta_mode', type=bool, default=False)
 p.add_argument('--model', '-m', type=str, default="")
 
