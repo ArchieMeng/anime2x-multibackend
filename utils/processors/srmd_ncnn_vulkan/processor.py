@@ -1,12 +1,13 @@
+from math import floor
+
 from PIL import Image
 
-if __package__ or '.' in __name__:
+try:
     from .srmd_ncnn_vulkan import SRMD
-    from ..params import ProcessParams
-else:
-    from srmd_ncnn_vulkan import SRMD
+except ImportError:
+    from srmd_ncnn_vulkan_python import SRMD
 
-    ProcessParams = None
+from ..params import ProcessParams
 
 
 class Processor:
@@ -20,4 +21,19 @@ class Processor:
                              max(params.tilesize, 0), )
 
     def process(self, im: Image) -> Image:
-        return self.upscaler.process(im)
+        w, h = im.size
+        cur_scale = 1
+        while cur_scale < self.params.scale:
+            for scale in range(2, 4):
+                if cur_scale * scale >= self.params.scale:
+                    cur_scale *= scale
+                    self.upscaler.scale = scale
+                    im = self.upscaler.process(im)
+                    break
+            else:
+                cur_scale *= 4
+                self.upscaler.scale = 4
+                im = self.upscaler.process(im)
+        w, h = floor(w * self.params.scale), floor(h * self.params.scale)
+        im = im.resize((w, h))
+        return im
