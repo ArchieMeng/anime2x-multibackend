@@ -18,6 +18,8 @@ p.add_argument('--vcodec', default="libx264",
                help="The codec of output video stream(s) in ffmpeg")
 p.add_argument('--acodec', default="copy",
                help="The codec of output audio stream(s)")
+p.add_argument('--scodec', default="copy",
+               help="The codec of output subtitles stream(s)")
 p.add_argument('--crf', default=23,
                help="CRF setting for video encoding")
 p.add_argument('--pix_fmt', default="yuv420p",
@@ -226,4 +228,5 @@ if __name__ == "__main__":
                           crf=args.crf,
                           debug=args.debug,
                           frame_rate=args.fps,
-                          pix_fmt=args.pix_fmt))
+                          pix_fmt=args.pix_fmt,
+                          additional_params={"scodec": args.scodec},))
