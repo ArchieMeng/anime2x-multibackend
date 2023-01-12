@@ -1,5 +1,12 @@
 # anime2x-multibackend
 
+## Archive Notice
+
+This project is now archived and no longer maintained. Because there are already some other stream-video processing software.
+I can still remember the day Jan 28 2019 when its first version was released, and proved the possibility of stream-video processing with Python. To me, it has already completed its mission, and even gave birth to the Everything2x-ncnn-vulkan-python series (Media2x now). It is time to say goodbye to the old days and get ready for new challenges.
+
+## Introduction
+
 A simple Python program which focus on efficiency in upscaling or/and denoising animes.
 
 It has several advantages:
